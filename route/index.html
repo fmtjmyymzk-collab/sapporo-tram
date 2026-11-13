@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#0b6e99" />
+<title>札幌 地下鉄・市電ルート検索（最短・最安）</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%230b6e99'/%3E%3Cpath d='M9 22 L16 8 L23 22' stroke='%23fff' stroke-width='3' fill='none' stroke-linejoin='round'/%3E%3C/svg%3E" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+<style>
+  :root{
+    --bg:#f3f5f7; --surface:#fff; --surface-2:#eef2f5; --ink:#15202b; --ink-2:#3f4d5a; --ink-3:#5f6c78;
+    --line:#d6dde3; --accent:#0b6e99; --accent-ink:#fff; --good:#007a3d; --cheap:#b45309;
+    --N:#00953a; --T:#e87900; --H:#0083c9; --SC:#2f7d4f; --walk:#6b7785;
+    --warn-bg:#fff6d6; --warn-border:#e3b505; --warn-ink:#5c4700;
+    --shadow:0 6px 20px rgba(20,30,45,.08); --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1418; --surface:#182027; --surface-2:#212b33; --ink:#eef3f6; --ink-2:#c5d0d8; --ink-3:#9aa8b3;
+      --line:#33414c; --accent:#5cc3ef; --accent-ink:#06202c; --good:#5fd896; --cheap:#fbbf24;
+      --N:#3cc46c; --T:#ff9a3c; --H:#4cb8f0; --SC:#5fd896; --walk:#9aa8b3;
+      --warn-bg:#352b0e; --warn-border:#a8871a; --warn-ink:#ffe9a3;
+      --shadow:0 6px 20px rgba(0,0,0,.4);
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);line-height:1.6;
+    font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif}
+  button,input{font:inherit;-webkit-tap-highlight-color:transparent}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  a{color:var(--accent)}
+  .wrap{max-width:1100px;margin:0 auto;padding:12px 12px 40px}
+
+  .appbar{background:var(--surface);border-bottom:3px solid var(--accent);padding:calc(10px + env(safe-area-inset-top)) 14px 10px}
+  .appbar-in{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:10px}
+  .appbar h1{margin:0;font-size:clamp(18px,4.6vw,24px);font-weight:900;line-height:1.25}
+  .appbar .sub{display:block;font-size:12px;color:var(--ink-3);font-weight:700}
+  .appbar .lines{margin-left:auto;display:flex;gap:4px;flex:0 0 auto}
+
+  .badge{display:inline-grid;place-items:center;min-width:26px;height:26px;padding:0 6px;border-radius:7px;
+    font-size:13px;font-weight:900;color:#fff;line-height:1}
+  .badge.N{background:var(--N)} .badge.T{background:var(--T)} .badge.H{background:var(--H)} .badge.SC{background:var(--SC)}
+  .badge.W{background:var(--walk)}
+  @media (prefers-color-scheme: dark){ .badge{color:#0f1418} }
+
+  .layout{display:grid;grid-template-columns:400px minmax(0,1fr);gap:14px;align-items:start;margin-top:12px}
+  @media (max-width:900px){ .layout{grid-template-columns:1fr} }
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+
+  /* 検索フォーム */
+  .form{padding:14px}
+  .pt{display:grid;grid-template-columns:30px 1fr;gap:8px;align-items:start}
+  .pt + .pt{margin-top:10px}
+  .pin{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:900;color:#fff;margin-top:5px}
+  .pin.a{background:var(--good)} .pin.b{background:#c0392b}
+  .pt label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-3);margin-bottom:2px}
+  .pt input[type=text]{
+    width:100%;font-size:16px;padding:10px 12px;border-radius:12px;border:1.5px solid var(--line);
+    background:var(--surface-2);color:var(--ink);min-height:46px;
+  }
+  .pt input[type=text]:focus{border-color:var(--accent);outline:none;background:var(--surface)}
+  .pt .tools{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .chipbtn{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:999px;
+    font-size:13px;font-weight:700;padding:5px 12px;min-height:36px;cursor:pointer}
+  .chipbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .resolved{font-size:12.5px;color:var(--good);font-weight:700;margin-top:4px;min-height:1em}
+  .resolved.err{color:#c0392b}
+  .swaprow{display:flex;align-items:center;gap:10px;margin:10px 0 0 38px}
+  .row2{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:12px}
+  .seg{display:inline-flex;background:var(--surface-2);border-radius:999px;padding:3px;gap:2px}
+  .seg button{border:0;background:transparent;color:var(--ink-2);font-size:14px;font-weight:700;padding:6px 14px;border-radius:999px;cursor:pointer;min-height:38px}
+  .seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+  .go{width:100%;margin-top:14px;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);
+    font-size:17px;font-weight:900;min-height:52px;cursor:pointer;box-shadow:0 4px 12px rgba(11,110,153,.3)}
+  .go:disabled{opacity:.6;cursor:default}
+  .privacy{font-size:11.5px;color:var(--ink-3);margin:8px 2px 0}
+
+  #map{height:300px;border-radius:var(--radius);overflow:hidden;background:var(--surface-2)}
+  @media (min-width:901px){ #map{height:380px} }
+  .maphint{font-size:12px;color:var(--ink-3);margin:6px 4px 0}
+  .picking #map{outline:3px solid var(--accent)}
+  .mapfallback{display:grid;place-items:center;height:100%;font-size:13px;color:var(--ink-3);padding:20px;text-align:center}
+
+  /* 結果 */
+  .results{margin-top:14px;display:grid;gap:12px}
+  .empty{padding:16px;font-size:14px;color:var(--ink-2)}
+  .route{padding:0;overflow:hidden;border-width:2px}
+  .route.sel{border-color:var(--accent)}
+  .rhead{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;padding:12px 14px;cursor:pointer}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+  .tag{font-size:12px;font-weight:900;padding:2px 9px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
+  .tag.fast{background:#e3f6ea;color:#05652f} .tag.cheap{background:#fdf0dc;color:#8a4b06}
+  @media (prefers-color-scheme: dark){ .tag.fast{background:#173826;color:#8de3b0} .tag.cheap{background:#3a2a10;color:#fcd38a} }
+  .summary{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .summary .min{font-size:28px;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.1}
+  .summary .min small{font-size:14px}
+  .summary .yen{font-size:22px;font-weight:900;font-variant-numeric:tabular-nums}
+  .summary .yen small{font-size:13px}
+  .summary .meta{font-size:12.5px;color:var(--ink-3);font-weight:700}
+  .strip{display:flex;align-items:center;gap:4px;margin-top:8px;flex-wrap:wrap;font-size:12px;color:var(--ink-3);font-weight:700}
+  .strip .arr{opacity:.6}
+
+  .steps{list-style:none;margin:0;padding:4px 14px 14px;border-top:1px solid var(--line)}
+  .steps li{display:grid;grid-template-columns:34px 1fr;gap:10px;position:relative;padding:8px 0}
+  .steps li::before{content:"";position:absolute;left:16px;top:38px;bottom:-8px;width:3px;background:var(--rail,var(--line));border-radius:2px}
+  .steps li:last-child::before{display:none}
+  .steps li.walk{--rail:repeating-linear-gradient(var(--walk) 0 4px,transparent 4px 8px)}
+  .steps li.N{--rail:var(--N)} .steps li.T{--rail:var(--T)} .steps li.H{--rail:var(--H)} .steps li.SC{--rail:var(--SC)}
+  .ico{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:17px;background:var(--surface-2)}
+  .steps .t1{font-weight:900;font-size:15px}
+  .steps .t2{font-size:13px;color:var(--ink-2)}
+  .steps .t3{font-size:12px;color:var(--ink-3)}
+  .fare{margin:0 14px 14px;padding:10px 12px;background:var(--surface-2);border-radius:12px;font-size:13px;color:var(--ink-2)}
+  .fare b{color:var(--ink)}
+  .walkcard{padding:12px 14px;font-size:14px;color:var(--ink-2)}
+
+  .notice{background:var(--warn-bg);border:1.5px solid var(--warn-border);color:var(--warn-ink);border-radius:12px;padding:10px 12px;font-size:13px;margin-top:14px}
+  .notice ul{margin:4px 0 0;padding-left:18px}
+  footer{margin-top:18px;font-size:12px;color:var(--ink-3);text-align:center}
+  .spin{display:inline-block;width:16px;height:16px;border:3px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp 1s linear infinite;vertical-align:-3px;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+<header class="appbar">
+  <div class="appbar-in">
+    <div>
+      <h1>札幌 地下鉄・市電ルート検索</h1>
+      <span class="sub">住所を入れると、最短・最安の行き方を表示します</span>
+    </div>
+    <div class="lines" aria-hidden="true"><span class="badge N">N</span><span class="badge T">T</span><span class="badge H">H</span><span class="badge SC">市</span></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="layout">
+    <section class="card form" aria-label="出発地と目的地">
+      <div class="pt">
+        <span class="pin a" aria-hidden="true">出</span>
+        <div>
+          <label for="inA">出発地（住所・駅名・停留場名）</label>
+          <input type="text" id="inA" placeholder="例：北区北24条西5丁目" autocomplete="street-address" enterkeyhint="next" />
+          <div class="tools">
+            <button type="button" class="chipbtn" id="gpsA">📍 現在地</button>
+            <button type="button" class="chipbtn" id="pickA" aria-pressed="false">🗺 地図で選ぶ</button>
+          </div>
+          <div class="resolved" id="resA" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="swaprow"><button type="button" class="chipbtn" id="swap">⇅ 出発と到着を入れ替え</button></div>
+      <div class="pt">
+        <span class="pin b" aria-hidden="true">着</span>
+        <div>
+          <label for="inB">目的地（住所・駅名・停留場名）</label>
+          <input type="text" id="inB" placeholder="例：すすきの／円山公園駅" enterkeyhint="search" />
+          <div class="tools">
+            <button type="button" class="chipbtn" id="gpsB">📍 現在地</button>
+            <button type="button" class="chipbtn" id="pickB" aria-pressed="false">🗺 地図で選ぶ</button>
+          </div>
+          <div class="resolved" id="resB" aria-live="polite"></div>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="seg" role="group" aria-label="運賃の区分">
+          <button type="button" id="adult" aria-pressed="true">大人</button>
+          <button type="button" id="child" aria-pressed="false">こども</button>
+        </div>
+      </div>
+      <button type="button" class="go" id="go">ルートを検索</button>
+      <p class="privacy">入力した住所は、位置に変換するためだけに国土地理院の住所検索へ送られます。このページでは保存しません。</p>
+    </section>
+
+    <div>
+      <div id="map" aria-label="地図"></div>
+      <p class="maphint" id="mapHint">ルートを選ぶと地図に表示されます。</p>
+    </div>
+  </div>
+
+  <div class="results" id="results" aria-live="polite"></div>
+
+  <div class="notice">
+    <strong>ご注意</strong>
+    <ul>
+      <li><strong>バスは含まれていません</strong>（地下鉄・市電・徒歩のみ）。</li>
+      <li>所要時間は平均的な目安です（待ち時間は地下鉄 約3分・市電 約4分で計算）。実際の時刻は時刻表でご確認ください。</li>
+      <li>運賃は札幌市交通局の料金表（2026年4月更新）に基づく計算です。地下鉄の区数は駅間距離からの推定のため、境目付近で実際と異なる場合があります。正確な運賃は<a href="https://www.city.sapporo.jp/st/josyaken/ryokin/ryoukin.html" target="_blank" rel="noopener">交通局の料金ページ</a>でご確認ください。</li>
+      <li>地下鉄と市電の乗継割引は、乗継指定駅（大通・すすきの・西11丁目・西18丁目・中島公園・幌平橋）で乗り継いだ場合に計算しています。適用条件は公式案内をご確認ください。</li>
+    </ul>
+  </div>
+  <footer>非公式ページです。札幌市交通局・札幌市交通事業振興公社とは関係ありません。地図：国土地理院 ／ 駅位置：駅データ.jp ／ <a href="../">札幌市電ライブマップ</a></footer>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+(function(){
+  "use strict";
+  var RAW = {"N": [["麻生", 43.109106, 141.338255], ["北34条", 43.099883, 141.342028], ["北24条", 43.089811, 141.344604], ["北18条", 43.081568, 141.346686], ["北12条", 43.074829, 141.348403], ["さっぽろ", 43.06637, 141.350299], ["大通", 43.060479, 141.354526], ["すすきの", 43.05578, 141.353257], ["中島公園", 43.048892, 141.354913], ["幌平橋", 43.040073, 141.355886], ["中の島", 43.037727, 141.360758], ["平岸", 43.034666, 141.36853], ["南平岸", 43.026842, 141.371355], ["澄川", 43.016845, 141.367308], ["自衛隊前", 43.006038, 141.364776], ["真駒内", 42.991134, 141.358499]], "T": [["宮の沢", 43.089962, 141.27717], ["発寒南", 43.081732, 141.289312], ["琴似", 43.075941, 141.303931], ["二十四軒", 43.070221, 141.314093], ["西28丁目", 43.060345, 141.314522], ["円山公園", 43.055582, 141.318863], ["西18丁目", 43.057168, 141.330204], ["西11丁目", 43.058557, 141.341036], ["大通", 43.060479, 141.354526], ["バスセンター前", 43.061268, 141.360473], ["菊水", 43.057169, 141.3727], ["東札幌", 43.051614, 141.384922], ["白石", 43.046076, 141.396242], ["南郷7丁目", 43.040091, 141.411759], ["南郷13丁目", 43.035783, 141.422697], ["南郷18丁目", 43.030229, 141.435196], ["大谷地", 43.028008, 141.452972], ["ひばりが丘", 43.032175, 141.464638], ["新さっぽろ", 43.039141, 141.473106]], "H": [["栄町", 43.112995, 141.367142], ["新道東", 43.104663, 141.369086], ["元町", 43.094355, 141.371598], ["環状通東", 43.082166, 141.374643], ["東区役所前", 43.078197, 141.364769], ["北13条東", 43.07689, 141.354851], ["さっぽろ", 43.06637, 141.350299], ["大通", 43.060479, 141.354526], ["豊水すすきの", 43.055008, 141.356838], ["学園前", 43.047448, 141.36909], ["豊平公園", 43.041929, 141.376573], ["美園", 43.036338, 141.385756], ["月寒中央", 43.030553, 141.396263], ["福住", 43.021621, 141.403105]], "SC": [["西4丁目", 43.058904, 141.352148], ["西8丁目", 43.058033, 141.345358], ["中央区役所前", 43.057823, 141.34224], ["西15丁目", 43.056955, 141.336108], ["西線6条", 43.051352, 141.335088], ["西線9条旭山公園通", 43.04722, 141.336365], ["西線11条", 43.044664, 141.335957], ["西線14条", 43.040775, 141.336429], ["西線16条", 43.037733, 141.336772], ["ロープウェイ入口", 43.03367, 141.337287], ["電車事業所前", 43.031271, 141.337609], ["中央図書館前", 43.030455, 141.340227], ["石山通", 43.030706, 141.344175], ["東屯田通", 43.031051, 141.347501], ["幌南小学校前", 43.032196, 141.351814], ["山鼻19条", 43.034706, 141.351514], ["静修学園前", 43.038329, 141.351063], ["行啓通", 43.041544, 141.35072], ["中島公園通", 43.045652, 141.350269], ["山鼻9条", 43.048067, 141.349862], ["東本願寺前", 43.051783, 141.34939], ["資生館小学校前", 43.055217, 141.34969], ["すすきの", 43.05578, 141.353257], ["狸小路", 43.057279, 141.352927]]};
+
+  /* ===== 基本データ ===== */
+  var LINES = {
+    N: { name:"南北線", km:14.3, min:27, color:"--N" },
+    T: { name:"東西線", km:20.1, min:33, color:"--T" },
+    H: { name:"東豊線", km:13.6, min:22, color:"--H" }
+  };
+  var SUB_WAIT = 3, TRAM_WAIT = 4;      // 平均待ち時間（分）
+  var WALK_MPM = 80, DETOUR = 1.3;      // 徒歩 80m/分、道なり係数
+  var ACCESS_MAX = 2200;                // 駅まで歩く最大距離(m)
+
+  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim() || "#888"; }
+  function dist(a, b){ // m
+    var R = 6371000, toR = Math.PI/180;
+    var dLat = (b.lat-a.lat)*toR, dLon = (b.lon-a.lon)*toR;
+    var x = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(a.lat*toR)*Math.cos(b.lat*toR)*Math.sin(dLon/2)*Math.sin(dLon/2);
+    return 2*R*Math.asin(Math.sqrt(x));
+  }
+  function walkMin(m){ return Math.max(1, Math.round(m*DETOUR/WALK_MPM)); }
+
+  /* ===== 地下鉄ネットワーク ===== */
+  var NODES = {};       // id -> {id, line, idx, name, lat, lon}
+  var ADJ = {};         // id -> [{to, min, km, type}]
+  function addEdge(a, b, min, km, type){
+    (ADJ[a] = ADJ[a] || []).push({to:b, min:min, km:km, type:type});
+    (ADJ[b] = ADJ[b] || []).push({to:a, min:min, km:km, type:type});
+  }
+  Object.keys(LINES).forEach(function(L){
+    var list = RAW[L], segs = [], sum = 0;
+    list.forEach(function(s, i){
+      var id = L + (i+1 < 10 ? "0" : "") + (i+1);
+      NODES[id] = { id:id, line:L, idx:i, name:s[0], lat:s[1], lon:s[2] };
+      if (i > 0){ var d = dist({lat:list[i-1][1],lon:list[i-1][2]}, {lat:s[1],lon:s[2]}); segs.push(d); sum += d; }
+    });
+    LINES[L].ids = list.map(function(_, i){ return L + (i+1 < 10 ? "0" : "") + (i+1); });
+    segs.forEach(function(d, i){
+      var km = LINES[L].km * d / sum;            // 路線全長に合わせて按分
+      var min = LINES[L].min * km / LINES[L].km;
+      addEdge(LINES[L].ids[i], LINES[L].ids[i+1], min, km, "ride");
+    });
+  });
+  // 乗換（同じ駅の別路線）
+  addEdge("N07","T09", 3+SUB_WAIT, 0, "xfer");   // 大通 南北⇔東西
+  addEdge("N07","H08", 5+SUB_WAIT, 0, "xfer");   // 大通 南北⇔東豊
+  addEdge("T09","H08", 5+SUB_WAIT, 0, "xfer");   // 大通 東西⇔東豊
+  addEdge("N06","H07", 5+SUB_WAIT, 0, "xfer");   // さっぽろ 南北⇔東豊
+
+  function dijkstra(src, key){
+    var D = {}, P = {}, done = {}, ids = Object.keys(NODES);
+    ids.forEach(function(i){ D[i] = Infinity; });
+    D[src] = 0;
+    for (;;){
+      var u = null, best = Infinity;
+      for (var k=0;k<ids.length;k++){ var i = ids[k]; if (!done[i] && D[i] < best){ best = D[i]; u = i; } }
+      if (u === null) break;
+      done[u] = true;
+      (ADJ[u]||[]).forEach(function(e){
+        var w = key === "km" ? e.km + (e.type === "xfer" ? 0.0001 : 0) : e.min;
+        if (D[u] + w < D[e.to]){ D[e.to] = D[u] + w; P[e.to] = u; }
+      });
+    }
+    return { D:D, P:P };
+  }
+  var SP = { min:{}, km:{} };
+  Object.keys(NODES).forEach(function(id){ SP.min[id] = dijkstra(id, "min"); SP.km[id] = dijkstra(id, "km"); });
+  function subwayPath(a, b){
+    var r = SP.min[a], path = [b];
+    while (path[0] !== a) path.unshift(r.P[path[0]]);
+    return path;
+  }
+
+  /* ===== 市電 ===== */
+  var TRAM = RAW.SC.map(function(s, i){ return { id:"SC"+(i+1<10?"0":"")+(i+1), idx:i, name:s[0], lat:s[1], lon:s[2] }; });
+  var TN = TRAM.length, TRAM_TRAVEL = 57*60 - 20*TN, TRAM_DWELL = 20/60;
+  var tramSeg = (function(){ // 内回り i -> i+1 の走行時間(分)
+    var d = [], sum = 0;
+    for (var i=0;i<TN;i++){ var x = dist(TRAM[i], TRAM[(i+1)%TN]); d.push(x); sum += x; }
+    return d.map(function(x){ return TRAM_TRAVEL * x / sum / 60; });
+  })();
+  function tramRide(a, b){ // 速い方向
+    function run(dir){
+      var t = 0, i = a, stops = [a];
+      while (i !== b){
+        var j = dir === "inner" ? (i+1)%TN : (i-1+TN)%TN;
+        t += dir === "inner" ? tramSeg[i] : tramSeg[j];
+        if (j !== b) t += TRAM_DWELL;
+        stops.push(j); i = j;
+      }
+      return { dir:dir, min:t, stops:stops };
+    }
+    var x = run("inner"), y = run("outer");
+    return x.min <= y.min ? x : y;
+  }
+
+  /* ===== 運賃（札幌市交通局 料金表） ===== */
+  var SUB_FARE = { adult:[210,250,290,330,360,380], child:[110,130,150,170,180,190] };
+  var XFER_FARE = { adult:[360,400,440,480], child:[180,200,220,240] }; // 地下鉄＋市電 乗継
+  var TRAM_FARE = { adult:230, child:120 };
+  function zoneOf(km){ // 0..5 → 1区..6区（②区は地下鉄単独では2区と同額）
+    if (km <= 3) return 0; if (km <= 7) return 1; if (km <= 11) return 2;
+    if (km <= 15) return 3; if (km <= 19) return 4; return 5;
+  }
+  function zoneLabel(km){ if (km > 3 && km <= 5) return "②区"; return (zoneOf(km)+1) + "区"; }
+  function xferFare(z, who){
+    if (z < 4) return XFER_FARE[who][z];
+    return SUB_FARE[who][z] + TRAM_FARE[who] - (who === "adult" ? 80 : 50); // 5・6区は同じ割引額で推定
+  }
+  // 乗継指定駅と最寄停留場
+  var XFER_PAIRS = [["N07",0],["T09",0],["H08",0],["N08",22],["T08",2],["T07",3],["N09",19],["N10",16]];
+  function isDesignated(subId, tramIdx){ return XFER_PAIRS.some(function(p){ return p[0] === subId && p[1] === tramIdx; }); }
+  // 乗り換えに使える組み合わせ（指定駅＋徒歩450m以内）
+  var LINKS = [];
+  Object.keys(NODES).forEach(function(id){
+    TRAM.forEach(function(t){
+      var d = dist(NODES[id], t);
+      if (isDesignated(id, t.idx) || d <= 450) LINKS.push({ sub:id, tram:t.idx, walk:walkMin(d), designated:isDesignated(id, t.idx) });
+    });
+  });
+
+  /* ===== 経路探索 ===== */
+  function nearest(pt, list, n, max){
+    return list.map(function(s){ return { s:s, d:dist(pt, s) }; })
+      .filter(function(x){ return x.d <= max; })
+      .sort(function(a, b){ return a.d - b.d; }).slice(0, n);
+  }
+  function subLegs(a, b){
+    var path = subwayPath(a, b), legs = [], cur = null;
+    for (var i=0;i<path.length;i++){
+      var n = NODES[path[i]];
+      if (cur && cur.line === n.line){ cur.ids.push(n.id); continue; }
+      if (cur){
+        legs.push(cur);
+        legs.push({ type:"xfer", at:n.name, from:cur.line, to:n.line });
+      }
+      cur = { type:"sub", line:n.line, ids:[n.id] };
+    }
+    legs.push(cur);
+    legs = legs.filter(function(l){ return l.type !== "sub" || l.ids.length > 1; });
+    // 乗換が連続した場合の整理
+    var out = [];
+    legs.forEach(function(l){
+      if (l.type === "xfer" && out.length && out[out.length-1].type === "xfer"){ out[out.length-1].to = l.to; return; }
+      out.push(l);
+    });
+    while (out.length && out[0].type === "xfer") out.shift();
+    while (out.length && out[out.length-1].type === "xfer") out.pop();
+    out.forEach(function(l){
+      if (l.type !== "sub") return;
+      var ln = LINES[l.line], first = NODES[l.ids[0]], last = NODES[l.ids[l.ids.length-1]];
+      var t = 0;
+      for (var k=1;k<l.ids.length;k++){ (ADJ[l.ids[k-1]]||[]).forEach(function(e){ if (e.to === l.ids[k] && e.type === "ride") t += e.min; }); }
+      l.min = t;
+      l.from = first.name; l.to = last.name;
+      l.toward = NODES[ last.idx > first.idx ? ln.ids[ln.ids.length-1] : ln.ids[0] ].name;
+    });
+    out.forEach(function(l){ if (l.type === "xfer"){ l.min = (l.from === "N" && l.to === "T") || (l.from === "T" && l.to === "N") ? 3 : 5; l.wait = SUB_WAIT; } });
+    return out;
+  }
+
+  function buildRoutes(A, B, who){
+    var routes = [];
+    var subA = nearest(A, values(NODES), 6, ACCESS_MAX), subB = nearest(B, values(NODES), 6, ACCESS_MAX);
+    var trA = nearest(A, TRAM, 4, ACCESS_MAX*0.8), trB = nearest(B, TRAM, 4, ACCESS_MAX*0.8);
+    // 同じ駅名（大通の3路線など）は徒歩が同じなので1つにまとめない（路線ごとに試す）
+
+    function walkLeg(fromName, toName, m){ return { type:"walk", from:fromName, to:toName, min:walkMin(m), m:m }; }
+    function finish(legs, fare, fareText){
+      legs = legs.filter(function(l){ return !(l.type === "walk" && !l.xfer && l.m < 60); }); // 駅そのものが出発地・目的地なら徒歩を省く
+      var min = 0, walk = 0, rides = 0;
+      legs.forEach(function(l){
+        min += l.min + (l.wait||0);
+        if (l.type === "walk") walk += l.min;
+        if (l.type === "sub" || l.type === "tram") rides++;
+      });
+      routes.push({ legs:legs, min:Math.round(min), fare:fare, fareText:fareText, walk:walk, transfers:Math.max(0, rides-1) });
+    }
+
+    // 1) 地下鉄のみ
+    subA.forEach(function(a){ subB.forEach(function(b){
+      if (a.s.id === b.s.id || a.s.name === b.s.name) return;
+      var legs = subLegs(a.s.id, b.s.id);
+      if (!legs.length) return;
+      legs[0].wait = SUB_WAIT;
+      var km = SP.km[a.s.id].D[b.s.id], z = zoneOf(km), f = SUB_FARE[who][z];
+      finish([walkLeg("出発地", a.s.name + "駅", a.d)].concat(legs, [walkLeg(b.s.name + "駅", "目的地", b.d)]),
+        f, "地下鉄 " + zoneLabel(km) + "（約" + km.toFixed(1) + "km） " + f + "円");
+    }); });
+
+    // 2) 市電のみ
+    trA.forEach(function(a){ trB.forEach(function(b){
+      if (a.s.idx === b.s.idx) return;
+      var r = tramRide(a.s.idx, b.s.idx);
+      var leg = { type:"tram", dir:r.dir, stops:r.stops, from:a.s.name, to:b.s.name, min:r.min, wait:TRAM_WAIT };
+      finish([walkLeg("出発地", a.s.name + "停留場", a.d), leg, walkLeg(b.s.name + "停留場", "目的地", b.d)],
+        TRAM_FARE[who], "市電 " + TRAM_FARE[who] + "円（全線均一）");
+    }); });
+
+    // 3) 地下鉄 → 市電、 4) 市電 → 地下鉄
+    LINKS.forEach(function(k){
+      var sub = NODES[k.sub], tram = TRAM[k.tram];
+      subA.forEach(function(a){ trB.forEach(function(b){
+        if (a.s.id === k.sub || a.s.name === sub.name || b.s.idx === k.tram) return;
+        var legs = subLegs(a.s.id, k.sub); if (!legs.length) return;
+        legs[0].wait = SUB_WAIT;
+        var r = tramRide(k.tram, b.s.idx);
+        var km = SP.km[a.s.id].D[k.sub], z = zoneOf(km);
+        var f, ft;
+        if (k.designated){ f = xferFare(z, who); ft = "地下鉄 " + zoneLabel(km) + " ＋ 市電（乗継割引） " + f + "円"; }
+        else { f = SUB_FARE[who][z] + TRAM_FARE[who]; ft = "地下鉄 " + SUB_FARE[who][z] + "円 ＋ 市電 " + TRAM_FARE[who] + "円 = " + f + "円（乗継割引なし）"; }
+        finish([walkLeg("出発地", a.s.name + "駅", a.d)].concat(legs, [
+          { type:"walk", from:sub.name + "駅", to:tram.name + "停留場", min:k.walk, xfer:true },
+          { type:"tram", dir:r.dir, stops:r.stops, from:tram.name, to:b.s.name, min:r.min, wait:TRAM_WAIT },
+          walkLeg(b.s.name + "停留場", "目的地", b.d)]), f, ft);
+      }); });
+      trA.forEach(function(a){ subB.forEach(function(b){
+        if (b.s.id === k.sub || b.s.name === sub.name || a.s.idx === k.tram) return;
+        var r = tramRide(a.s.idx, k.tram);
+        var legs = subLegs(k.sub, b.s.id); if (!legs.length) return;
+        legs[0].wait = SUB_WAIT;
+        var km = SP.km[k.sub].D[b.s.id], z = zoneOf(km);
+        var f, ft;
+        if (k.designated){ f = xferFare(z, who); ft = "市電 ＋ 地下鉄 " + zoneLabel(km) + "（乗継割引） " + f + "円"; }
+        else { f = SUB_FARE[who][z] + TRAM_FARE[who]; ft = "市電 " + TRAM_FARE[who] + "円 ＋ 地下鉄 " + SUB_FARE[who][z] + "円 = " + f + "円（乗継割引なし）"; }
+        finish([walkLeg("出発地", a.s.name + "停留場", a.d),
+          { type:"tram", dir:r.dir, stops:r.stops, from:a.s.name, to:tram.name, min:r.min, wait:TRAM_WAIT },
+          { type:"walk", from:tram.name + "停留場", to:sub.name + "駅", min:k.walk, xfer:true }].concat(legs, [
+          walkLeg(b.s.name + "駅", "目的地", b.d)]), f, ft);
+      }); });
+    });
+
+    // 重複をまとめる
+    var seen = {}, uniq = [];
+    routes.sort(function(a, b){ return a.min - b.min || a.fare - b.fare; }).forEach(function(r){
+      var key = r.legs.filter(function(l){ return l.type === "sub" || l.type === "tram"; })
+        .map(function(l){ return l.type === "sub" ? l.line + l.from + l.to : "SC" + l.from + l.to; }).join("|");
+      if (seen[key]) return; seen[key] = true; uniq.push(r);
+    });
+    return uniq;
+  }
+  function values(o){ return Object.keys(o).map(function(k){ return o[k]; }); }
+
+  function pickRoutes(all){
+    if (!all.length) return [];
+    var fastest = all[0];
+    // 歩きすぎるルートは候補から外す（最短ルート＋15分まで、最低20分は許容）
+    var walkCap = Math.max(fastest.walk + 15, 20);
+    all = all.filter(function(r){ return r.walk <= walkCap; });
+    var cheapest = all.slice().sort(function(a, b){ return a.fare - b.fare || a.min - b.min; })[0];
+    var lessWalk = all.filter(function(r){ return r.min <= fastest.min + 12; })
+      .sort(function(a, b){ return a.walk - b.walk || a.min - b.min; })[0];
+    var out = [];
+    function add(r, tag){ var e = out.filter(function(x){ return x.r === r; })[0]; if (e) e.tags.push(tag); else out.push({ r:r, tags:[tag] }); }
+    add(fastest, "fast"); add(cheapest, "cheap"); if (lessWalk) add(lessWalk, "walk");
+    all.forEach(function(r){ if (out.length < 4 && r.min <= fastest.min + 15 && !out.some(function(x){ return x.r === r; })) out.push({ r:r, tags:[] }); });
+    return out;
+  }
+
+  /* ===== 地図 ===== */
+  var map = null, layer = null, markers = { A:null, B:null };
+  try {
+    if (window.L){
+      map = L.map("map", { zoomControl:true, attributionControl:true }).setView([43.055, 141.352], 13);
+      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png", {
+        maxZoom:18, attribution:'<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>'
+      }).addTo(map);
+      layer = L.layerGroup().addTo(map);
+      // 路線を薄く表示
+      Object.keys(LINES).forEach(function(k){
+        L.polyline(LINES[k].ids.map(function(id){ return [NODES[id].lat, NODES[id].lon]; }), { color:css(LINES[k].color), weight:4, opacity:.35 }).addTo(map);
+      });
+      L.polyline(TRAM.concat([TRAM[0]]).map(function(t){ return [t.lat, t.lon]; }), { color:css("--SC"), weight:3, opacity:.35, dashArray:"6 4" }).addTo(map);
+    }
+  } catch(e){ map = null; }
+  if (!map) document.getElementById("map").innerHTML = '<div class="mapfallback">地図を読み込めませんでした。ルート検索はこのまま使えます。</div>';
+
+  function pinIcon(label, color){
+    return L.divIcon({ className:"", iconSize:[30,30], iconAnchor:[15,15],
+      html:'<div style="width:30px;height:30px;border-radius:50%;background:' + color + ';color:#fff;display:grid;place-items:center;font-weight:900;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);font-family:sans-serif">' + label + '</div>' });
+  }
+  function setMarker(which){
+    if (!map) return;
+    var p = state[which];
+    if (markers[which]){ map.removeLayer(markers[which]); markers[which] = null; }
+    if (!p) return;
+    markers[which] = L.marker([p.lat, p.lon], { icon: pinIcon(which === "A" ? "出" : "着", which === "A" ? "#007a3d" : "#c0392b") }).addTo(map);
+  }
+  function drawRoute(r){
+    if (!map) return;
+    layer.clearLayers();
+    var pts = [];
+    var prev = [state.A.lat, state.A.lon];
+    r.legs.forEach(function(l, i){
+      var line = [];
+      if (l.type === "sub"){ line = l.ids.map(function(id){ return [NODES[id].lat, NODES[id].lon]; }); }
+      else if (l.type === "tram"){ line = l.stops.map(function(i){ return [TRAM[i].lat, TRAM[i].lon]; }); }
+      if (l.type === "sub" || l.type === "tram"){
+        L.polyline([prev, line[0]], { color:css("--walk"), weight:4, dashArray:"2 8", lineCap:"round" }).addTo(layer);
+        L.polyline(line, { color: l.type === "sub" ? css(LINES[l.line].color) : css("--SC"), weight:7, opacity:.95 }).addTo(layer);
+        [line[0], line[line.length-1]].forEach(function(p){ L.circleMarker(p, { radius:6, color:"#fff", weight:2, fillColor:"#15202b", fillOpacity:1 }).addTo(layer); });
+        pts = pts.concat(line); prev = line[line.length-1];
+      }
+    });
+    L.polyline([prev, [state.B.lat, state.B.lon]], { color:css("--walk"), weight:4, dashArray:"2 8", lineCap:"round" }).addTo(layer);
+    pts.push([state.A.lat, state.A.lon], [state.B.lat, state.B.lon]);
+    map.fitBounds(L.latLngBounds(pts), { padding:[30,30] });
+  }
+
+  /* ===== 入力と位置の解決 ===== */
+  var state = { A:null, B:null, who:"adult", picking:null };
+  var $ = function(id){ return document.getElementById(id); };
+  var SAPPORO = { s:42.75, n:43.25, w:141.0, e:141.65 };
+  function inSapporo(p){ return p.lat > SAPPORO.s && p.lat < SAPPORO.n && p.lon > SAPPORO.w && p.lon < SAPPORO.e; }
+  function norm(s){ return (s||"").normalize("NFKC").replace(/\s+/g,"").replace(/[駅]$/,"").replace(/停留場$|電停$/,""); }
+
+  function matchStation(q){
+    var n = norm(q);
+    if (!n) return null;
+    if (n === "札幌" ) n = "さっぽろ";
+    var all = values(NODES).map(function(s){ return { name:s.name + "駅", lat:s.lat, lon:s.lon, key:norm(s.name) }; })
+      .concat(TRAM.map(function(t){ return { name:t.name + "停留場（市電）", lat:t.lat, lon:t.lon, key:norm(t.name) }; }));
+    var hit = all.filter(function(s){ return s.key === n; })[0];
+    return hit ? { lat:hit.lat, lon:hit.lon, label:hit.name } : null;
+  }
+  function geocode(q){
+    var st = matchStation(q);
+    if (st) return Promise.resolve(st);
+    var text = (q||"").normalize("NFKC").trim();
+    if (!/札幌/.test(text)) text = "北海道札幌市" + text;
+    else if (!/北海道/.test(text)) text = "北海道" + text;
+    return fetch("https://msearch.gsi.go.jp/address-search/AddressSearch?q=" + encodeURIComponent(text))
+      .then(function(r){ if (!r.ok) throw new Error("http"); return r.json(); })
+      .then(function(arr){
+        var c = (arr||[]).map(function(x){ return { lat:x.geometry.coordinates[1], lon:x.geometry.coordinates[0], label:x.properties.title }; })
+          .filter(inSapporo);
+        if (!c.length) throw new Error("notfound");
+        return c[0];
+      });
+  }
+  function showResolved(which, p, err){
+    var el = $("res" + which);
+    el.className = "resolved" + (err ? " err" : "");
+    el.textContent = err ? err : (p ? "✓ " + p.label : "");
+  }
+  function setPoint(which, p){
+    state[which] = p;
+    showResolved(which, p);
+    setMarker(which);
+  }
+  ["A","B"].forEach(function(w){
+    $("in" + w).addEventListener("input", function(){ state[w] = null; showResolved(w, null); setMarker(w); });
+    $("in" + w).addEventListener("keydown", function(ev){
+      if (ev.key === "Enter"){ ev.preventDefault(); if (w === "A") $("inB").focus(); else search(); }
+    });
+    $("gps" + w).addEventListener("click", function(){
+      if (!navigator.geolocation){ showResolved(w, null, "この端末では現在地を使えません"); return; }
+      showResolved(w, null, ""); $("res" + w).textContent = "現在地を取得中…";
+      navigator.geolocation.getCurrentPosition(function(pos){
+        var p = { lat:pos.coords.latitude, lon:pos.coords.longitude, label:"現在地" };
+        if (!inSapporo(p)){ showResolved(w, null, "現在地が札幌市内ではないようです"); return; }
+        $("in" + w).value = "現在地";
+        setPoint(w, p);
+        if (map) map.setView([p.lat, p.lon], 15);
+      }, function(){ showResolved(w, null, "現在地を取得できませんでした（位置情報の許可をご確認ください）"); },
+      { enableHighAccuracy:true, timeout:10000 });
+    });
+    $("pick" + w).addEventListener("click", function(){
+      if (!map){ showResolved(w, null, "地図が使えないため選べません"); return; }
+      state.picking = state.picking === w ? null : w;
+      $("pickA").setAttribute("aria-pressed", state.picking === "A" ? "true" : "false");
+      $("pickB").setAttribute("aria-pressed", state.picking === "B" ? "true" : "false");
+      document.body.classList.toggle("picking", !!state.picking);
+      $("mapHint").textContent = state.picking ? "地図をタップして" + (w === "A" ? "出発地" : "目的地") + "を選んでください" : "ルートを選ぶと地図に表示されます。";
+      if (state.picking) $("map").scrollIntoView({ behavior:"smooth", block:"center" });
+    });
+  });
+  if (map){
+    map.on("click", function(ev){
+      var w = state.picking; if (!w) return;
+      var p = { lat:ev.latlng.lat, lon:ev.latlng.lng, label:"地図で選んだ地点" };
+      $("in" + w).value = "地図で選んだ地点";
+      setPoint(w, p);
+      state.picking = null;
+      $("pickA").setAttribute("aria-pressed","false"); $("pickB").setAttribute("aria-pressed","false");
+      document.body.classList.remove("picking");
+      $("mapHint").textContent = "ルートを選ぶと地図に表示されます。";
+    });
+  }
+  $("swap").addEventListener("click", function(){
+    var va = $("inA").value; $("inA").value = $("inB").value; $("inB").value = va;
+    var a = state.A; state.A = state.B; state.B = a;
+    showResolved("A", state.A); showResolved("B", state.B); setMarker("A"); setMarker("B");
+    if (state.A && state.B) search();
+  });
+  function setWho(w){
+    state.who = w;
+    $("adult").setAttribute("aria-pressed", w === "adult" ? "true" : "false");
+    $("child").setAttribute("aria-pressed", w === "child" ? "true" : "false");
+    if (state.A && state.B) render();
+  }
+  $("adult").addEventListener("click", function(){ setWho("adult"); });
+  $("child").addEventListener("click", function(){ setWho("child"); });
+
+  function resolve(w){
+    if (state[w]) return Promise.resolve(state[w]);
+    var q = $("in" + w).value.trim();
+    if (!q){ showResolved(w, null, w === "A" ? "出発地を入力してください" : "目的地を入力してください"); return Promise.reject(); }
+    return geocode(q).then(function(p){ setPoint(w, p); return p; }, function(e){
+      showResolved(w, null, e && e.message === "notfound"
+        ? "札幌市内で見つかりませんでした。「区」から入れるか、駅名・地図で選んでください"
+        : "住所を調べられませんでした（通信をご確認ください）。駅名か地図で選ぶこともできます");
+      throw e;
+    });
+  }
+
+  var busy = false;
+  function search(){
+    if (busy) return;
+    busy = true;
+    var btn = $("go");
+    btn.disabled = true; btn.innerHTML = '<span class="spin"></span>検索中…';
+    Promise.all([resolve("A").catch(function(){ return null; }), resolve("B").catch(function(){ return null; })])
+      .then(function(r){ if (r[0] && r[1]) render(); })
+      .then(function(){ busy = false; btn.disabled = false; btn.textContent = "ルートを検索"; },
+            function(){ busy = false; btn.disabled = false; btn.textContent = "ルートを検索"; });
+  }
+  $("go").addEventListener("click", search);
+
+  /* ===== 結果表示 ===== */
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function legHTML(l){
+    if (l.type === "walk"){
+      var m = l.m ? "（約" + (Math.round(l.m*DETOUR/50)*50) + "m）" : "";
+      return '<li class="walk"><span class="ico">🚶</span><div><div class="t1">' + (l.xfer ? "乗り換え：歩いて移動" : "徒歩 " + l.min + "分") + '</div>' +
+        '<div class="t2">' + esc(l.from) + ' → ' + esc(l.to) + (l.xfer ? "（徒歩" + l.min + "分）" : m) + '</div></div></li>';
+    }
+    if (l.type === "xfer"){
+      return '<li class="walk"><span class="ico">🔁</span><div><div class="t1">乗り換え（' + esc(l.at) + '駅）</div>' +
+        '<div class="t2">' + LINES[l.from].name + ' → ' + LINES[l.to].name + '（構内移動 約' + l.min + '分＋待ち時間）</div></div></li>';
+    }
+    if (l.type === "sub"){
+      var ln = LINES[l.line], n = l.ids.length - 1;
+      return '<li class="' + l.line + '"><span class="ico"><span class="badge ' + l.line + '">' + l.line + '</span></span><div>' +
+        '<div class="t1">' + ln.name + '　' + esc(l.from) + ' → ' + esc(l.to) + '</div>' +
+        '<div class="t2">' + esc(l.toward) + ' 方面・' + n + '駅・約' + Math.round(l.min) + '分</div>' +
+        '<div class="t3">乗車駅の番号：' + l.ids[0] + ' → ' + l.ids[n] + '</div></div></li>';
+    }
+    var cnt = l.stops.length - 1;
+    return '<li class="SC"><span class="ico"><span class="badge SC">市</span></span><div>' +
+      '<div class="t1">市電 ' + (l.dir === "inner" ? "内回り" : "外回り") + '　' + esc(l.from) + ' → ' + esc(l.to) + '</div>' +
+      '<div class="t2">' + cnt + '停留場・約' + Math.round(l.min) + '分</div></div></li>';
+  }
+  function stripHTML(r){
+    var parts = [];
+    r.legs.forEach(function(l){
+      if (l.type === "walk" && !l.xfer) parts.push('<span class="badge W" title="徒歩">🚶</span><span>' + l.min + '分</span>');
+      else if (l.type === "sub") parts.push('<span class="badge ' + l.line + '">' + l.line + '</span><span>' + LINES[l.line].name + '</span>');
+      else if (l.type === "tram") parts.push('<span class="badge SC">市</span><span>市電</span>');
+    });
+    return parts.join('<span class="arr">›</span>');
+  }
+  var lastRoutes = [], selIdx = 0;
+  function render(){
+    var box = $("results");
+    var A = state.A, B = state.B;
+    var all = buildRoutes(A, B, state.who);
+    var picks = pickRoutes(all);
+    var straight = dist(A, B), walkOnly = walkMin(straight);
+    var html = "";
+    if (!picks.length){
+      html += '<div class="card empty"><strong>地下鉄・市電を使うルートが見つかりませんでした。</strong><br>' +
+        (straight < 300 ? "出発地と目的地がとても近いです。" : "近く（約2km以内）に地下鉄駅・市電の停留場がない地点は、バス対応前のため検索できません。") + '</div>';
+    }
+    picks.forEach(function(p, i){
+      var r = p.r;
+      var tags = p.tags.map(function(t){ return t === "fast" ? '<span class="tag fast">⚡ 最短</span>' : t === "cheap" ? '<span class="tag cheap">💴 最安</span>' : '<span class="tag">🚶 歩き少なめ</span>'; }).join("");
+      html += '<article class="card route' + (i === 0 ? " sel" : "") + '" data-i="' + i + '">' +
+        '<button type="button" class="rhead" aria-expanded="' + (i === 0) + '">' +
+        '<div class="tags">' + tags + '</div>' +
+        '<div class="summary"><span class="min">約' + r.min + '<small>分</small></span><span class="yen">' + r.fare + '<small>円</small></span>' +
+        '<span class="meta">乗換' + r.transfers + '回・徒歩' + r.walk + '分</span></div>' +
+        '<div class="strip">' + stripHTML(r) + '</div></button>' +
+        '<div class="detail"' + (i === 0 ? "" : " hidden") + '><ol class="steps">' +
+        '<li class="walk"><span class="ico">🟢</span><div><div class="t1">出発地</div><div class="t2">' + esc(A.label) + '</div></div></li>' +
+        r.legs.map(legHTML).join("") +
+        '<li><span class="ico">🔴</span><div><div class="t1">目的地</div><div class="t2">' + esc(B.label) + '</div></div></li>' +
+        '</ol><div class="fare">運賃（' + (state.who === "adult" ? "大人" : "こども") + '）：<b>' + r.fare + '円</b><br>' + esc(r.fareText) + '</div></div></article>';
+    });
+    if (straight >= 300){
+      html += '<div class="card walkcard">🚶 全部歩くと <strong>約' + walkOnly + '分</strong>（0円・約' + (Math.round(straight*DETOUR/100)/10) + 'km）' +
+        (walkOnly <= 15 ? "　— 歩いた方が早いかもしれません" : "") + '</div>';
+    }
+    box.innerHTML = html;
+    lastRoutes = picks.map(function(p){ return p.r; });
+    Array.prototype.forEach.call(box.querySelectorAll(".route"), function(card){
+      card.querySelector(".rhead").addEventListener("click", function(){
+        var i = +card.getAttribute("data-i");
+        Array.prototype.forEach.call(box.querySelectorAll(".route"), function(c){
+          var on = c === card;
+          c.classList.toggle("sel", on);
+          c.querySelector(".detail").hidden = !on;
+          c.querySelector(".rhead").setAttribute("aria-expanded", on);
+        });
+        drawRoute(lastRoutes[i]);
+      });
+    });
+    if (lastRoutes.length) drawRoute(lastRoutes[0]);
+    box.scrollIntoView({ behavior:"smooth", block:"start" });
+  }
+
+  // テスト用
+  window.__route = { buildRoutes:buildRoutes, pickRoutes:pickRoutes, NODES:NODES, TRAM:TRAM, SP:SP, zoneOf:zoneOf, setPoint:setPoint, render:render, state:state };
+})();
+</script>
+</body>
+</html>
