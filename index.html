@@ -1,0 +1,1093 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="theme-color" content="#007a3d" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='22' rx='5' fill='%23007a3d'/%3E%3Crect x='8' y='10' width='16' height='8' rx='2' fill='%23fff'/%3E%3Cpath d='M10 3h12M16 3v3' stroke='%23007a3d' stroke-width='2'/%3E%3C/svg%3E" />
+<title>札幌市電ライブマップ（時刻表ベース）</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#f4f6f3;
+    --surface:#ffffff;
+    --surface-2:#eef3ee;
+    --ink:#17211a;
+    --ink-2:#43514a;
+    --ink-3:#5f6e65;
+    --line:#d7dfd8;
+    --tram:#007a3d;
+    --tram-dark:#005f2f;
+    --inner:#007a3d;
+    --outer:#d0561a;
+    --accent:#0b6e99;
+    --warn-bg:#fff6d6;
+    --warn-border:#e3b505;
+    --warn-ink:#5c4700;
+    --sim:#c2410c;
+    --sim-bg:#fff1e6;
+    --selected:#ffd23e;
+    --shadow:0 6px 20px rgba(20,40,25,.08);
+    --track:#9db8a5;
+    --radius:16px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0f1511;
+      --surface:#19211b;
+      --surface-2:#222c25;
+      --ink:#eef4ef;
+      --ink-2:#c3d0c6;
+      --ink-3:#9aab9f;
+      --line:#334239;
+      --tram:#2fbf71;
+      --tram-dark:#5fd896;
+      --inner:#35c26e;
+      --outer:#ff8a4a;
+      --accent:#5cc3ef;
+      --warn-bg:#352b0e;
+      --warn-border:#a8871a;
+      --warn-ink:#ffe9a3;
+      --sim:#ff9a5c;
+      --sim-bg:#3a2214;
+      --selected:#ffd23e;
+      --shadow:0 6px 20px rgba(0,0,0,.4);
+      --track:#4c6a56;
+    }
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%;scroll-padding-top:90px}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic",system-ui,sans-serif;
+    line-height:1.6;
+  }
+  a{color:var(--accent)}
+  button{font:inherit;-webkit-tap-highlight-color:transparent}
+  :focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .wrap{max-width:1180px;margin:0 auto;padding:12px 14px 40px}
+
+  /* ===== 上部バー（常に表示：タイトル＋時計） ===== */
+  .appbar{
+    position:sticky;top:0;z-index:30;
+    background:var(--surface);
+    background:color-mix(in srgb, var(--surface) 88%, transparent);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    border-bottom:3px solid var(--tram);
+    padding:calc(8px + env(safe-area-inset-top)) 14px 8px;
+  }
+  .appbar-in{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:12px}
+  .brand{min-width:0}
+  .brand h1{margin:0;font-size:clamp(17px,4.2vw,24px);font-weight:900;line-height:1.25;letter-spacing:.01em}
+  .brand .sub{font-size:12px;font-weight:700;color:var(--ink-3);display:block}
+  .clockbox{margin-left:auto;text-align:right;flex:0 0 auto}
+  .clockbox .clock{font-size:clamp(22px,6vw,30px);font-weight:900;line-height:1.1;font-variant-numeric:tabular-nums}
+  .clockbox .meta{font-size:11.5px;font-weight:700;color:var(--ink-3);white-space:nowrap}
+  .simbar{
+    display:none;max-width:1180px;margin:6px auto 0;align-items:center;gap:10px;flex-wrap:wrap;
+    background:var(--sim-bg);color:var(--sim);border-radius:10px;padding:5px 6px 5px 12px;font-size:13px;font-weight:900;
+  }
+  body.is-sim .appbar{border-bottom-color:var(--sim)}
+  body.is-sim .simbar{display:flex}
+  body.is-sim .clockbox .clock{color:var(--sim)}
+  .simbar .pbtn{margin-left:auto;min-height:34px;padding:4px 14px;background:var(--sim);border-color:var(--sim)}
+
+  /* ===== 注意書き（短く＋詳しくは折りたたみ） ===== */
+  .notice{
+    background:var(--warn-bg);border:1.5px solid var(--warn-border);color:var(--warn-ink);
+    border-radius:12px;padding:8px 12px;font-size:13.5px;margin:0 0 12px;
+  }
+  .notice summary{cursor:pointer;font-weight:700;list-style:none;display:flex;gap:8px;align-items:flex-start}
+  .notice summary::-webkit-details-marker{display:none}
+  .notice summary .mark{
+    flex:0 0 auto;width:20px;height:20px;border-radius:50%;background:var(--warn-border);color:#fff;
+    display:grid;place-items:center;font-weight:900;font-size:13px;margin-top:2px;
+  }
+  .notice summary .more{margin-left:auto;font-size:12px;text-decoration:underline;white-space:nowrap;flex:0 0 auto}
+  .notice[open] summary .more{display:none}
+  .notice p{margin:6px 0 2px 28px;font-size:13px}
+
+  /* ===== レイアウト ===== */
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 370px;gap:14px;align-items:start}
+  @media (max-width:920px){ .layout{grid-template-columns:1fr} }
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .side{display:grid;gap:14px;position:sticky;top:96px}
+  @media (max-width:920px){ .side{position:static} }
+
+  /* ===== 地図カード ===== */
+  .mapcard{padding:10px 10px 6px;overflow:hidden}
+  .maphead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:2px 2px 6px}
+  .countline{font-size:13.5px;color:var(--ink-2);font-weight:700;margin:0}
+  .countline strong{color:var(--ink);font-size:15px}
+  .countline .in{color:var(--inner)} .countline .out{color:var(--outer)}
+  .viewtoggle{margin-left:auto}
+  .legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;font-weight:700;width:100%;color:var(--ink-2)}
+  .legend span{display:inline-flex;align-items:center;gap:4px}
+  .legend small{font-weight:500;color:var(--ink-3)}
+  #map{width:100%;height:auto;display:block;touch-action:manipulation}
+  .linewrap{max-width:460px;margin:0 auto}
+  #line{width:100%;height:auto;display:block}
+  .maphint{font-size:12.5px;color:var(--ink-3);padding:4px 4px 6px;margin:0}
+
+  .seg{display:inline-flex;background:var(--surface-2);border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+  .seg button{
+    border:0;background:transparent;color:var(--ink-2);font-size:14px;font-weight:700;
+    padding:6px 14px;border-radius:999px;cursor:pointer;min-height:40px;
+  }
+  .seg button[aria-pressed="true"]{background:var(--tram);color:#fff}
+
+  /* svg 地図 */
+  .track-shadow{fill:none;stroke:var(--track);stroke-width:13;stroke-linejoin:round;stroke-linecap:round;opacity:.3}
+  .track{fill:none;stroke:var(--track);stroke-width:6;stroke-linejoin:round;stroke-linecap:round}
+  .station{cursor:pointer}
+  .station circle.core{fill:var(--surface);stroke:var(--ink-2);stroke-width:2.5}
+  .station:hover circle.core,.station:focus-visible circle.core{stroke:var(--tram);stroke-width:3.5}
+  .station.sel circle.core{fill:var(--selected);stroke:var(--ink);stroke-width:3.5}
+  .station.sel text.name{font-weight:900}
+  .station .selbg{fill:var(--selected);opacity:0}
+  .station.sel .selbg{opacity:.28}
+  .station text{fill:var(--ink);font-weight:700;pointer-events:none}
+  .station .code{fill:var(--ink-3);font-weight:700}
+  .station .fav{fill:#e0a800;font-weight:900}
+  .station:focus{outline:none}
+  .station:focus-visible .hit{stroke:var(--accent);stroke-width:3;fill:transparent}
+  .area-label{fill:var(--ink-3);font-weight:700;letter-spacing:.14em}
+  .row-alt{fill:var(--surface-2);opacity:.6}
+  .loopback text{fill:var(--ink-3)}
+
+  .train{pointer-events:none}
+  .train .tram-icon{filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))}
+  .tram-body{stroke:#fff;stroke-width:2.5}
+  .inner{color:var(--inner)} .outer{color:var(--outer)}
+  .tram-window{fill:#fff}
+  .tram-divider{stroke-width:1.6}
+  .tram-light{fill:#fff}
+  .tram-band{fill:rgba(255,255,255,.55)}
+  .tram-pant{fill:none;stroke:var(--ink-2);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .tram-bogie{fill:rgba(0,0,0,.30)}
+  .tram-wheel{fill:#1d241f;stroke:#fff;stroke-width:1.1}
+  .train .arrow{stroke:#fff;stroke-width:1.2}
+  .train.inner .arrow{fill:var(--inner)} .train.outer .arrow{fill:var(--outer)}
+  .train .ring{fill:none;stroke-width:2;opacity:0;transform-box:fill-box;transform-origin:center}
+  .train.inner .ring{stroke:var(--inner)} .train.outer .ring{stroke:var(--outer)}
+  .train.stopped .tram-icon{animation:stopBlink 1s ease-in-out infinite}
+  .train.stopped .ring{animation:ringPulse 1.2s ease-out infinite}
+  /* 選択中の停留場に次に来る電車を強調 */
+  .train .halo{fill:var(--selected);opacity:0}
+  .train.next .halo{opacity:.55}
+  @keyframes stopBlink{0%,100%{opacity:1}50%{opacity:.45}}
+  @keyframes ringPulse{0%{transform:scale(1);opacity:.85}100%{transform:scale(1.8);opacity:0}}
+  @media (prefers-color-scheme: dark){ .tram-body,.train .arrow,.tram-wheel{stroke:#0f1511} }
+  @media (prefers-reduced-motion: reduce){ .train.stopped .tram-icon,.train.stopped .ring{animation:none} }
+  .tram-legend{filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
+
+  /* ===== 次の電車パネル ===== */
+  .panel{padding:14px 16px 16px}
+  .st-head{display:flex;align-items:center;gap:10px}
+  .st-code{background:var(--tram);color:#fff;font-weight:900;font-size:13px;padding:2px 9px;border-radius:7px;letter-spacing:.04em;flex:0 0 auto}
+  .panel h2{font-size:24px;margin:0;line-height:1.3;min-width:0}
+  .favbtn{
+    margin-left:auto;flex:0 0 auto;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);
+    border-radius:999px;min-height:40px;padding:4px 12px;font-size:13px;font-weight:700;cursor:pointer;
+  }
+  .favbtn[aria-pressed="true"]{background:#fff4c2;border-color:#e0a800;color:#6b4e00}
+  @media (prefers-color-scheme: dark){ .favbtn[aria-pressed="true"]{background:#3b310f;color:#ffe08a} }
+  .transfer{font-size:13px;color:var(--ink-2);margin:6px 0 0}
+  .transfer:empty{display:none}
+  .dirblock{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+  .dirblock h3{margin:0;font-size:17px;display:flex;align-items:center;gap:8px}
+  .dirblock h3 .chev{font-size:12.5px;font-weight:700;color:var(--ink-3)}
+  .route-note{font-size:12.5px;color:var(--ink-3);margin:2px 0 8px}
+  .nextlist{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+  .nextlist li{
+    display:grid;grid-template-columns:96px 1fr;align-items:center;gap:4px 12px;
+    background:var(--surface-2);border-radius:12px;padding:8px 12px;border-left:5px solid transparent;
+  }
+  .dir-inner .nextlist li:first-child{border-left-color:var(--inner)}
+  .dir-outer .nextlist li:first-child{border-left-color:var(--outer)}
+  .nextlist .mins{font-size:22px;font-weight:900;line-height:1.15;font-variant-numeric:tabular-nums;color:var(--tram-dark)}
+  .nextlist .mins small{font-size:13px;font-weight:700}
+  .nextlist li.soon .mins{color:var(--outer)}
+  .nextlist .info{min-width:0}
+  .nextlist .time{font-size:15px;font-weight:900;font-variant-numeric:tabular-nums}
+  .nextlist .time small{font-size:11.5px;color:var(--ink-3);font-weight:700;margin-left:2px}
+  .nextlist .where{font-size:12px;color:var(--ink-2);font-weight:500;line-height:1.4}
+  .none-msg{font-size:14px;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin:0}
+  .foot-note{font-size:12px;color:var(--ink-3);margin:12px 0 0}
+
+  /* ===== 時間を動かす（再生・ダイヤ） ===== */
+  .ctrl{padding:14px 16px}
+  .ctrl h2{font-size:16px;margin:0 0 10px}
+  .ctrl .row{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;margin-top:10px}
+  .ctrl .row:first-of-type{margin-top:0}
+  .ctrl .label{font-size:13px;font-weight:700;color:var(--ink-2);min-width:52px}
+  .pbtn{
+    font-size:14px;font-weight:900;cursor:pointer;min-height:40px;
+    border-radius:999px;padding:7px 16px;border:1px solid var(--tram);background:var(--tram);color:#fff;
+  }
+  .pbtn.ghost{background:var(--surface-2);color:var(--ink);border-color:var(--line)}
+  .pbtn:disabled{opacity:.45;cursor:default}
+  input[type="time"]{
+    font:inherit;font-size:15px;font-weight:700;min-height:40px;padding:4px 10px;border-radius:10px;
+    border:1px solid var(--line);background:var(--surface-2);color:var(--ink);
+  }
+  .applied{font-size:12.5px;color:var(--ink-3);font-weight:700;margin:8px 0 0}
+
+  /* ===== 停留場チップ ===== */
+  .chips-card{margin-top:14px;padding:14px 16px}
+  .chips-card h2{font-size:16px;margin:0 0 4px}
+  .chips-card p{font-size:12.5px;color:var(--ink-3);margin:0 0 10px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chips button{
+    font-size:14px;font-weight:700;color:var(--ink);
+    background:var(--surface-2);border:1px solid var(--line);border-radius:999px;
+    padding:7px 13px;cursor:pointer;min-height:42px;
+  }
+  .chips button .c{color:var(--ink-3);font-size:11px;margin-right:4px}
+  .chips button[aria-pressed="true"]{background:var(--tram);border-color:var(--tram);color:#fff}
+  .chips button[aria-pressed="true"] .c{color:#d8f3e2}
+  .chips button.isfav::after{content:"★";color:#e0a800;margin-left:4px}
+
+  /* ===== 仕組み（折りたたみ） ===== */
+  .about{margin-top:14px;padding:4px 18px}
+  .about > summary{cursor:pointer;font-weight:900;font-size:16px;padding:12px 0}
+  .about[open] > summary{border-bottom:1px solid var(--line);margin-bottom:6px}
+  .about h3{font-size:15px;margin:16px 0 6px}
+  .about p,.about li{font-size:14px;color:var(--ink-2)}
+  .about ul{margin:6px 0;padding-left:20px}
+  .about table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}
+  .about th,.about td{border-bottom:1px solid var(--line);padding:7px 8px;text-align:left;vertical-align:top}
+  .about th{color:var(--ink-3);font-weight:700;width:34%}
+  .src{font-size:12.5px;color:var(--ink-3);padding-bottom:12px}
+  footer{margin-top:18px;font-size:12px;color:var(--ink-3);text-align:center}
+
+  /* ===== スマホ用：下部の「次の電車」バー ===== */
+  .quickbar{display:none}
+  @media (max-width:920px){
+    body{padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+    .quickbar{
+      display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;gap:10px;align-items:center;
+      padding:8px 12px calc(8px + env(safe-area-inset-bottom));
+      background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -6px 18px rgba(0,0,0,.10);
+      border:0;width:100%;text-align:left;color:var(--ink);cursor:pointer;
+    }
+    .quickbar .qname{font-weight:900;font-size:15px;line-height:1.2;min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .quickbar .qname small{display:block;font-size:11px;color:var(--ink-3);font-weight:700}
+    .quickbar .q{flex:0 0 auto;text-align:center;background:var(--surface-2);border-radius:10px;padding:3px 10px;min-width:84px}
+    .quickbar .q b{display:block;font-size:17px;font-weight:900;line-height:1.2;font-variant-numeric:tabular-nums}
+    .quickbar .q span{font-size:11px;font-weight:700}
+    .quickbar .q.in span{color:var(--inner)} .quickbar .q.out span{color:var(--outer)}
+  }
+  @media (max-width:520px){
+    .wrap{padding:10px 10px 32px}
+    .brand .sub{display:none}
+    .panel h2{font-size:21px}
+    .nextlist li{grid-template-columns:84px 1fr}
+    .nextlist .mins{font-size:20px}
+  }
+</style>
+</head>
+<body>
+
+<!-- 上部バー：スクロールしても時計が見える -->
+<header class="appbar">
+  <div class="appbar-in">
+    <div class="brand">
+      <h1>札幌市電ライブマップ</h1>
+      <span class="sub">環状線 全24停留場・時刻表からの推定位置</span>
+    </div>
+    <div class="clockbox">
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="meta"><span id="dateLine">―</span>・<span id="diaBadge">―</span></div>
+    </div>
+  </div>
+  <div class="simbar" role="status">
+    <span id="simText">シミュレーション中</span>
+    <button type="button" class="pbtn" id="btnNowTop">今に戻る</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <details class="notice">
+    <summary><span class="mark" aria-hidden="true">!</span><span>電車の位置は<strong>時刻表から計算した推定</strong>です（GPSの実位置ではありません）</span><span class="more">詳しく</span></summary>
+    <p>遅延・運休・折返し運行などは反映されません。正確な運行状況は公式の「札幌市電Navi」や札幌市交通事業振興公社の案内でご確認ください。このページは非公式の個人向け再現ページです。</p>
+  </details>
+
+  <div class="layout">
+    <section class="card mapcard" aria-label="札幌市電 環状線 路線図">
+      <div class="maphead">
+        <p class="countline" id="countLine" aria-live="off">読み込み中…</p>
+        <div class="seg viewtoggle" role="group" aria-label="表示の切り替え">
+          <button type="button" id="vMap" aria-pressed="true">地図</button>
+          <button type="button" id="vLine" aria-pressed="false">縦の路線図</button>
+        </div>
+        <div class="legend" aria-label="凡例">
+          <span><svg class="tram-legend inner" width="22" height="27" viewBox="-18 -24 36 44" aria-hidden="true"><use href="#tramSym"/></svg>内回り <small id="lgInner">（地図上で反時計回り）</small></span>
+          <span><svg class="tram-legend outer" width="22" height="27" viewBox="-18 -24 36 44" aria-hidden="true"><use href="#tramSym"/></svg>外回り <small id="lgOuter">（地図上で時計回り）</small></span>
+          <span><svg width="18" height="18" viewBox="-10 -10 20 20" aria-hidden="true"><circle r="8" fill="var(--selected)" opacity=".7"/></svg><small>選んだ停留場に次に来る電車</small></span>
+        </div>
+      </div>
+
+      <svg id="map" viewBox="96 20 744 560" role="group" aria-label="環状線の路線図。停留場を選ぶと次の電車が表示されます。">
+        <defs>
+          <g id="tramSym">
+            <path class="tram-pant" d="M-7 -21 H7 M0 -21 L-6 -15 M0 -21 L6 -15 M-6 -15 H6"/>
+            <rect class="tram-body" fill="currentColor" x="-13" y="-14" width="26" height="27" rx="4"/>
+            <rect class="tram-window" x="-9" y="-10" width="18" height="9" rx="2"/>
+            <line class="tram-divider" stroke="currentColor" x1="0" y1="-10" x2="0" y2="-1"/>
+            <rect class="tram-band" x="-9" y="2" width="18" height="2.4" rx="1.2"/>
+            <circle class="tram-light" cx="-7" cy="8.5" r="2.2"/>
+            <circle class="tram-light" cx="7" cy="8.5" r="2.2"/>
+            <rect class="tram-bogie" x="-10" y="13" width="20" height="4" rx="2"/>
+            <circle class="tram-wheel" cx="-6" cy="18.5" r="2.8"/>
+            <circle class="tram-wheel" cx="6" cy="18.5" r="2.8"/>
+          </g>
+        </defs>
+        <text class="area-label" x="470" y="40" text-anchor="middle" font-size="14">▲ 大通公園・一条通 付近</text>
+        <text class="area-label" x="470" y="570" text-anchor="middle" font-size="14">▼ 山鼻・中島公園 付近</text>
+        <path class="track-shadow" id="trackShadow" d=""/>
+        <path class="track" id="trackPath" d=""/>
+        <g id="stationsLayer"></g>
+        <g id="trainsLayer"></g>
+      </svg>
+
+      <div class="linewrap" hidden id="lineWrap">
+        <svg id="line" role="group" aria-label="環状線を縦一列に並べた路線図。内回りは下へ、外回りは上へ進みます。"></svg>
+      </div>
+
+      <p class="maphint" id="mapHint">停留場をタップすると「次の電車」が表示されます。停車中の電車は点滅します。</p>
+    </section>
+
+    <div class="side">
+      <aside class="card panel" id="panel" aria-label="選択した停留場の次の電車">
+        <div class="st-head">
+          <span class="st-code" id="pCode">SC23</span>
+          <h2 id="pName">すすきの</h2>
+          <button type="button" class="favbtn" id="favBtn" aria-pressed="false">☆ いつもの停留場</button>
+        </div>
+        <p class="transfer" id="pTransfer"></p>
+
+        <div class="dirblock dir-inner">
+          <h3><svg class="tram-legend inner" width="20" height="24" viewBox="-18 -24 36 44" aria-hidden="true"><use href="#tramSym"/></svg>内回り <span class="chev" id="innerTo"></span></h3>
+          <p class="route-note" id="innerNote"></p>
+          <ul class="nextlist" id="innerList"></ul>
+        </div>
+
+        <div class="dirblock dir-outer">
+          <h3><svg class="tram-legend outer" width="20" height="24" viewBox="-18 -24 36 44" aria-hidden="true"><use href="#tramSym"/></svg>外回り <span class="chev" id="outerTo"></span></h3>
+          <p class="route-note" id="outerNote"></p>
+          <ul class="nextlist" id="outerList"></ul>
+        </div>
+
+        <p class="foot-note">※ 時刻は運転間隔モデルから計算した目安です。正確な時刻は公式の時刻表でご確認ください。</p>
+      </aside>
+
+      <section class="card ctrl" aria-label="時間を動かす">
+        <h2>時間を動かして見る</h2>
+        <div class="row">
+          <button type="button" class="pbtn" id="btnPlay">❚❚ 一時停止</button>
+          <button type="button" class="pbtn ghost" id="btnNow" disabled>今に戻る</button>
+        </div>
+        <div class="row">
+          <span class="label" id="speedLabel">速さ</span>
+          <div class="seg" role="group" aria-labelledby="speedLabel">
+            <button type="button" data-speed="1" aria-pressed="true">×1</button>
+            <button type="button" data-speed="10" aria-pressed="false">×10</button>
+            <button type="button" data-speed="60" aria-pressed="false">×60</button>
+            <button type="button" data-speed="300" aria-pressed="false">×300</button>
+          </div>
+        </div>
+        <div class="row">
+          <label class="label" for="jumpTime">時刻へ</label>
+          <input type="time" id="jumpTime" value="08:00" />
+          <button type="button" class="pbtn ghost" id="btnJump">この時刻から再生</button>
+        </div>
+        <div class="row">
+          <span class="label" id="modeLabel">ダイヤ</span>
+          <div class="seg" role="group" aria-labelledby="modeLabel">
+            <button type="button" id="btnAuto" aria-pressed="true">自動</button>
+            <button type="button" id="btnWeekday" aria-pressed="false">平日</button>
+            <button type="button" id="btnHoliday" aria-pressed="false">土日祝</button>
+          </div>
+        </div>
+        <p class="applied" id="appliedMode">―</p>
+      </section>
+    </div>
+  </div>
+
+  <section class="card chips-card" aria-label="停留場一覧">
+    <h2>停留場から選ぶ</h2>
+    <p>SC01〜SC24（内回り順）。★は「いつもの停留場」です。</p>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <details class="card about">
+    <summary>このページの仕組み・市電の基本情報</summary>
+    <p>本家の「札幌市電Navi」は車両の運行と連動して位置を表示していますが、車両GPSの実データは公開されていないため、このページでは<strong>時刻表（運転間隔）から位置を計算する方式</strong>で再現しています。</p>
+    <ul>
+      <li>中央図書館前を発着の起点として、内回り・外回りそれぞれ運転間隔ごとに電車を出発させ、1周 約57分（停車時間を含む）で環状線を周回させています。</li>
+      <li>停留場の間の進み具合は、停留場間の実距離（通算距離）で按分しています。各停留場では約20秒停車します。</li>
+      <li>平日・土日祝の自動判定は、土日に加えて<strong>国民の祝日・振替休日</strong>にも対応しています（年末年始などの特別ダイヤは反映していません）。</li>
+      <li>倍速再生や「時刻へ」は、この時刻表モデルを早回し・移動したシミュレーションです。「今に戻る」で現在時刻に戻ります。</li>
+    </ul>
+    <h3>運転間隔のモデル（目安）</h3>
+    <table>
+      <tr><th>平日 朝ラッシュ（7〜9時）</th><td>外回り おおむね4分間隔／内回り おおむね5分間隔</td></tr>
+      <tr><th>平日 日中（9〜17時）</th><td>おおむね7〜9分間隔（モデルでは7.5分）</td></tr>
+      <tr><th>平日 その他</th><td>朝6分／夕方6.5分／夜8.5分間隔として計算</td></tr>
+      <tr><th>土日祝</th><td>おおむね7.5分間隔</td></tr>
+      <tr><th>運行時間帯</th><td>おおむね6時台〜23時台。中央図書館前発の目安：外回り始発 5:56／内回り始発 6:02、最終は外回り 22:48／内回り 22:54 発（1周して戻ります）</td></tr>
+    </table>
+    <h3>市電の基本情報</h3>
+    <table>
+      <tr><th>路線</th><td>環状線（一条線・山鼻西線・山鼻線・都心線）全長 8.905km、全24停留場、すべて札幌市中央区内</td></tr>
+      <tr><th>運賃</th><td>全線均一 大人230円・小児120円（2024年12月1日現在）</td></tr>
+      <tr><th>内回り</th><td>西4丁目 → 西15丁目 → 中央図書館前 → すすきの → 西4丁目 方面</td></tr>
+      <tr><th>外回り</th><td>西4丁目 → すすきの → 中央図書館前 → 西15丁目 → 西4丁目 方面</td></tr>
+    </table>
+    <p class="src">出典：停留場の順序・番号・距離は Wikipedia「札幌市電」の停留場一覧、運転頻度・運行時間（05:56–23:49）も同記事を参照。停留場ごとの正確な時刻表は公式ページ（一般財団法人 札幌市交通事業振興公社「時刻表」2025年12月1日改正）をご確認ください：<a href="https://www.stsp.or.jp/business/streetcar/time/" target="_blank" rel="noopener">札幌市交通事業振興公社 時刻表</a>／<a href="https://ja.wikipedia.org/wiki/%E6%9C%AD%E5%B9%8C%E5%B8%82%E9%9B%BB" target="_blank" rel="noopener">Wikipedia「札幌市電」</a></p>
+  </details>
+
+  <footer>札幌市電ライブマップ（時刻表ベース）― 非公式ページです。札幌市交通局・札幌市交通事業振興公社とは関係ありません。</footer>
+</div>
+
+<!-- スマホ用：選んだ停留場の次の電車を常に表示 -->
+<button type="button" class="quickbar" id="quickbar" aria-label="次の電車の詳細を表示">
+  <span class="qname" id="qName">すすきの<small>次の電車（推定）</small></span>
+  <span class="q in"><span>内回り</span><b id="qIn">―</b></span>
+  <span class="q out"><span>外回り</span><b id="qOut">―</b></span>
+</button>
+
+<div class="sr-only" aria-live="polite" id="srLive"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ===== 保存（使えない環境でも落ちないように） ===== */
+  function load(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function save(k, v){ try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch(e){} }
+
+  /* ===== 路線データ（内回り番号順 SC01→SC24、通算距離は Wikipedia 停留場一覧） ===== */
+  var TOTAL_DIST = 8.905;
+  var LOOP_SEC   = 57 * 60;
+  var DWELL_SEC  = 20;
+  var STATIONS = [
+    {code:"SC01", name:"西4丁目",          dist:0.000, x:740, y:100, label:"n", transfer:"地下鉄 大通駅（南北線・東西線・東豊線）乗換"},
+    {code:"SC02", name:"西8丁目",          dist:0.501, x:544, y:100, label:"n", transfer:""},
+    {code:"SC03", name:"中央区役所前",      dist:0.901, x:446, y:100, label:"n", transfer:"地下鉄 西11丁目駅（東西線）乗換"},
+    {code:"SC04", name:"西15丁目",         dist:1.436, x:250, y:100, label:"n", transfer:"地下鉄 西18丁目駅（東西線）乗換"},
+    {code:"SC05", name:"西線6条",          dist:2.000, x:250, y:193, label:"w", transfer:""},
+    {code:"SC06", name:"西線9条旭山公園通", dist:2.374, x:250, y:248, label:"w", transfer:""},
+    {code:"SC07", name:"西線11条",         dist:2.744, x:250, y:285, label:"w", transfer:""},
+    {code:"SC08", name:"西線14条",         dist:3.226, x:250, y:341, label:"w", transfer:""},
+    {code:"SC09", name:"西線16条",         dist:3.600, x:250, y:378, label:"w", transfer:""},
+    {code:"SC10", name:"ロープウェイ入口",  dist:3.973, x:250, y:433, label:"w", transfer:"藻岩山ロープウェイ方面の最寄り"},
+    {code:"SC11", name:"電車事業所前",      dist:4.309, x:250, y:470, label:"w", transfer:"電車事業所（車庫）の最寄り"},
+    {code:"SC12", name:"中央図書館前",      dist:4.590, x:299, y:489, label:"s", transfer:"発着の起点となる停留場"},
+    {code:"SC13", name:"石山通",           dist:4.921, x:397, y:489, label:"s", transfer:""},
+    {code:"SC14", name:"東屯田通",         dist:5.202, x:495, y:489, label:"s", transfer:""},
+    {code:"SC15", name:"幌南小学校前",      dist:5.613, x:593, y:470, label:"e", transfer:""},
+    {code:"SC16", name:"山鼻19条",         dist:5.871, x:593, y:433, label:"e", transfer:""},
+    {code:"SC17", name:"静修学園前",        dist:6.287, x:593, y:378, label:"e", transfer:"地下鉄 幌平橋駅（南北線）乗換"},
+    {code:"SC18", name:"行啓通",           dist:6.618, x:593, y:341, label:"e", transfer:""},
+    {code:"SC19", name:"中島公園通",        dist:7.095, x:593, y:285, label:"e", transfer:"中島公園の最寄り"},
+    {code:"SC20", name:"山鼻9条",          dist:7.438, x:593, y:248, label:"e", transfer:"地下鉄 中島公園駅（南北線）乗換"},
+    {code:"SC21", name:"東本願寺前",        dist:7.751, x:593, y:211, label:"e", transfer:""},
+    {code:"SC22", name:"資生館小学校前",    dist:8.182, x:642, y:156, label:"n", transfer:""},
+    {code:"SC23", name:"すすきの",         dist:8.456, x:740, y:156, label:"e", transfer:"地下鉄 すすきの駅・大通駅 乗換"},
+    {code:"SC24", name:"狸小路",           dist:8.703, x:740, y:128, label:"e", transfer:"狸小路商店街の最寄り"}
+  ];
+  var N = STATIONS.length;
+  var IDX_LIBRARY = 11;
+  var DIRS = ["inner","outer"];
+  var DIRNAME = {inner:"内回り", outer:"外回り"};
+
+  var travelTotal = LOOP_SEC - DWELL_SEC * N;
+  var segTravel = [];
+  for (var i=0;i<N;i++){
+    var d0 = STATIONS[(i+1)%N].dist - STATIONS[i].dist;
+    if (d0 <= 0) d0 += TOTAL_DIST;
+    segTravel[i] = travelTotal * d0 / TOTAL_DIST;
+  }
+  function segBetween(fromIdx, toIdx, dir){ return dir === "inner" ? segTravel[fromIdx] : segTravel[toIdx]; }
+  function orderFor(dir){
+    var order = [], k;
+    for (k=0;k<=N;k++) order.push(dir === "inner" ? (IDX_LIBRARY + k) % N : ((IDX_LIBRARY - k) % N + N) % N);
+    return order;
+  }
+  var ORDER = { inner: orderFor("inner"), outer: orderFor("outer") };
+
+  /* 中央図書館前を出てから各停留場へ着くまでの秒数
+     （修正：以前は中央図書館前の値が「1周後の到着」で上書きされ、出発便が表示されていなかった） */
+  function arrivalOffsets(dir){
+    var order = ORDER[dir], acc = 0, out = {};
+    out[order[0]] = 0;
+    for (var k=0;k<N-1;k++){
+      acc += segBetween(order[k], order[k+1], dir);
+      out[order[k+1]] = acc;
+      acc += DWELL_SEC;
+    }
+    return out;
+  }
+  var OFFSETS = { inner: arrivalOffsets("inner"), outer: arrivalOffsets("outer") };
+
+  /* ===== 祝日判定（国民の祝日・振替休日・国民の休日） ===== */
+  var holidayCache = {};
+  function nthMonday(y, m, n){ var d = new Date(y, m-1, 1); var first = (8 - d.getDay()) % 7 + 1; return first + (n-1)*7; }
+  function holidaysOf(y){
+    if (holidayCache[y]) return holidayCache[y];
+    var set = {};
+    function add(m, d){ set[m + "-" + d] = true; }
+    add(1,1); add(2,11); add(2,23); add(4,29); add(5,3); add(5,4); add(5,5); add(8,11); add(11,3); add(11,23);
+    add(1, nthMonday(y,1,2));   // 成人の日
+    add(7, nthMonday(y,7,3));   // 海の日
+    add(9, nthMonday(y,9,3));   // 敬老の日
+    add(10, nthMonday(y,10,2)); // スポーツの日
+    var b = y - 1980;
+    add(3, Math.floor(20.8431 + 0.242194*b - Math.floor(b/4)));  // 春分の日
+    add(9, Math.floor(23.2488 + 0.242194*b - Math.floor(b/4)));  // 秋分の日
+    // 国民の休日（祝日に挟まれた平日）
+    for (var t = new Date(y,0,2); t.getFullYear() === y; t.setDate(t.getDate()+1)){
+      var prev = new Date(t), next = new Date(t);
+      prev.setDate(t.getDate()-1); next.setDate(t.getDate()+1);
+      if (!set[(t.getMonth()+1)+"-"+t.getDate()] && t.getDay() !== 0 &&
+          set[(prev.getMonth()+1)+"-"+prev.getDate()] && next.getFullYear() === y && set[(next.getMonth()+1)+"-"+next.getDate()]){
+        add(t.getMonth()+1, t.getDate());
+      }
+    }
+    // 振替休日（日曜の祝日 → 次の平日）
+    var keys = Object.keys(set);
+    keys.forEach(function(k){
+      var p = k.split("-"), dt = new Date(y, +p[0]-1, +p[1]);
+      if (dt.getDay() === 0){
+        var s = new Date(dt);
+        do { s.setDate(s.getDate()+1); } while (set[(s.getMonth()+1)+"-"+s.getDate()]);
+        if (s.getFullYear() === y) add(s.getMonth()+1, s.getDate());
+      }
+    });
+    holidayCache[y] = set;
+    return set;
+  }
+  function isPublicHoliday(d){ return !!holidaysOf(d.getFullYear())[(d.getMonth()+1)+"-"+d.getDate()]; }
+
+  /* ===== 運転間隔モデル ===== */
+  function headwayMin(minOfDay, isHoliday, dir){
+    if (isHoliday) return 7.5;
+    var h = Math.floor(minOfDay/60);
+    if (h >= 7 && h < 9)  return dir === "outer" ? 4 : 5;
+    if (h >= 9 && h < 17) return 7.5;
+    if (h >= 17 && h < 19) return 6.5;
+    if (h >= 6 && h < 7)  return 6;
+    return 8.5;
+  }
+  var FIRST = { inner: 6*60+2,  outer: 5*60+56 };
+  var LAST  = { inner: 22*60+54, outer: 22*60+48 };
+  function departuresFor(dir, isHoliday){
+    var list = [], t = FIRST[dir];
+    while (t <= LAST[dir]){ list.push(t); t += headwayMin(t, isHoliday, dir); }
+    return list;
+  }
+
+  /* ===== 状態 ===== */
+  var modeOverride = null;           // null=自動, true=土日祝, false=平日
+  var favorite = (function(){ var v = load("tram.fav"); var n = v === null ? NaN : parseInt(v,10); return n >= 0 && n < N ? n : null; })();
+  var selected = 22;
+  var view = load("tram.view") || (window.matchMedia && window.matchMedia("(max-width:640px)").matches ? "line" : "map");
+  var depsCache = { key:"", inner:null, outer:null };
+  var highlight = {};                // 次に来る電車 "inner:3" -> true
+
+  function holidayReason(d){
+    if (d.getDay() === 0) return "日曜";
+    if (d.getDay() === 6) return "土曜";
+    if (isPublicHoliday(d)) return "祝日";
+    return "";
+  }
+  function isHolidayNow(d){ return modeOverride !== null ? modeOverride : holidayReason(d) !== ""; }
+  function deps(isHoliday){
+    var key = isHoliday ? "h" : "w";
+    if (depsCache.key !== key) depsCache = { key:key, inner:departuresFor("inner", isHoliday), outer:departuresFor("outer", isHoliday) };
+    return depsCache;
+  }
+
+  /* ===== 電車の状態計算 ===== */
+  function trainState(dir, depMin, nowMin){
+    var elapsed = (nowMin - depMin) * 60;
+    if (elapsed < 0 || elapsed > LOOP_SEC) return null;
+    var order = ORDER[dir], e = elapsed;
+    for (var k=0;k<N;k++){
+      var a = order[k], b = order[k+1], tt = segBetween(a, b, dir);
+      if (e < tt) return { a:a, b:b, p: tt > 0 ? e/tt : 0, stopped:false };
+      e -= tt;
+      if (k === N-1) break;
+      if (e < DWELL_SEC) return { a:b, b:b, p:0, stopped:true, next:order[k+2] };
+      e -= DWELL_SEC;
+    }
+    return { a:IDX_LIBRARY, b:IDX_LIBRARY, p:0, stopped:true, prev:order[N-1], end:true };
+  }
+  function stateText(s){
+    if (!s) return "";
+    if (s.end) return "中央図書館前に到着（1周終了）";
+    if (s.stopped) return STATIONS[s.a].name + " に停車中";
+    return STATIONS[s.a].name + " → " + STATIONS[s.b].name + " を走行中";
+  }
+
+  /* ===== 地図の描画 ===== */
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function mk(name, attrs, parent){
+    var e = document.createElementNS(SVGNS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+  (function(){
+    var d = "";
+    for (var i=0;i<N;i++) d += (i===0?"M":"L") + STATIONS[i].x + " " + STATIONS[i].y + " ";
+    d += "Z";
+    document.getElementById("trackPath").setAttribute("d", d);
+    document.getElementById("trackShadow").setAttribute("d", d);
+  })();
+
+  function labelPos(st){
+    switch(st.label){
+      case "n": return {x:st.x, y:st.y-18, anchor:"middle"};
+      case "s": return {x:st.x, y:st.y+32, anchor:"middle"};
+      case "w": return {x:st.x-18, y:st.y+5, anchor:"end"};
+      case "e": return {x:st.x+18, y:st.y+5, anchor:"start"};
+    }
+    return {x:st.x, y:st.y-18, anchor:"middle"};
+  }
+  function bindSelect(g, idx){
+    g.addEventListener("click", function(){ selectStation(idx, true); });
+    g.addEventListener("keydown", function(ev){
+      if (ev.key==="Enter" || ev.key===" "){ ev.preventDefault(); selectStation(idx, true); }
+    });
+  }
+
+  var stationsLayer = document.getElementById("stationsLayer");
+  var stationEls = [], favMarks = [];
+  STATIONS.forEach(function(st, idx){
+    var g = mk("g", {"class":"station", tabindex:"0", role:"button", "aria-label": st.code + " " + st.name + "（次の電車を表示）"}, stationsLayer);
+    mk("circle", {"class":"selbg", cx:st.x, cy:st.y, r:22}, g);
+    mk("circle", {"class":"hit", cx:st.x, cy:st.y, r:22, fill:"transparent"}, g);
+    mk("circle", {"class":"core", cx:st.x, cy:st.y, r:9}, g);
+    var lp = labelPos(st);
+    var t1 = mk("text", {"class":"name", x:lp.x, y:lp.y, "text-anchor":lp.anchor, "font-size": st.name.length >= 8 ? "14" : "16"}, g);
+    t1.textContent = st.name;
+    var cy = st.label === "n" ? lp.y - 17 : lp.y + 15;
+    var t2 = mk("text", {"class":"code", x:lp.x, y:cy, "text-anchor":lp.anchor, "font-size":"11.5"}, g);
+    t2.textContent = st.code;
+    var fv = mk("tspan", {"class":"fav"}, t2);
+    favMarks.push(fv);
+    bindSelect(g, idx);
+    stationEls.push(g);
+  });
+
+  /* ===== 縦の路線図（スマホで見やすい一覧型） ===== */
+  var ROW = 46, TOP = 26, LX = 70, IN_X = 42, OUT_X = 98, LW = 360;
+  var lineSvg = document.getElementById("line");
+  var lineH = TOP + N*ROW + 24;
+  lineSvg.setAttribute("viewBox", "0 0 " + LW + " " + lineH);
+  var lineStationsG = mk("g", {}, lineSvg);
+  mk("line", {x1:LX, y1:TOP, x2:LX, y2:TOP+N*ROW, stroke:"var(--track)", "stroke-width":6, "stroke-linecap":"round"}, lineStationsG);
+  var lineTrainsG = mk("g", {}, lineSvg);
+  var lineEls = [];
+  function addLineRow(idx, row, loop){
+    var st = STATIONS[idx], y = TOP + row*ROW;
+    var g = mk("g", {"class": "station" + (loop ? " loopback" : ""), tabindex: loop ? "-1" : "0", role:"button",
+      "aria-label": st.code + " " + st.name + "（次の電車を表示）"}, lineStationsG);
+    if (row % 2 === 0 && !loop) mk("rect", {"class":"row-alt", x:0, y:y-ROW/2, width:LW, height:ROW, rx:8}, g);
+    mk("rect", {"class":"selbg", x:2, y:y-ROW/2+2, width:LW-4, height:ROW-4, rx:10}, g);
+    mk("rect", {"class":"hit", x:0, y:y-ROW/2, width:LW, height:ROW, fill:"transparent", rx:8}, g);
+    mk("circle", {"class":"core", cx:LX, cy:y, r:8}, g);
+    var code = mk("text", {"class":"code", x:126, y:y+5, "font-size":"11.5"}, g);
+    code.textContent = st.code;
+    var nm = mk("text", {"class":"name", x:166, y:y+6, "font-size": loop ? "13" : (st.name.length >= 8 ? "15" : "16.5")}, g);
+    nm.textContent = loop ? st.name + "（1周して戻る）" : st.name;
+    if (!loop) { var fv = mk("tspan", {"class":"fav", dx:"6"}, nm); favMarks.push(fv); }
+    bindSelect(g, idx);
+    if (!loop) lineEls.push(g);
+  }
+  for (var r=0;r<N;r++) addLineRow(r, r, false);
+  addLineRow(0, N, true);
+  var lt1 = mk("text", {x:IN_X, y:14, "text-anchor":"middle", "font-size":"11", "font-weight":"700", fill:"var(--inner)"}, lineSvg); lt1.textContent = "内回り↓";
+  var lt2 = mk("text", {x:OUT_X, y:14, "text-anchor":"middle", "font-size":"11", "font-weight":"700", fill:"var(--outer)"}, lineSvg); lt2.textContent = "外回り↑";
+
+  function linePos(s, dir){
+    var ra = s.a, rb = s.b;
+    if (Math.abs(ra - rb) > 1){ if (ra === 0) ra = N; if (rb === 0) rb = N; }
+    var row = ra + (rb - ra) * s.p;
+    return { x: dir === "inner" ? IN_X : OUT_X, y: TOP + row*ROW };
+  }
+
+  /* ===== 停留場チップ ===== */
+  var chipsEl = document.getElementById("chips");
+  var chipEls = [];
+  STATIONS.forEach(function(st, idx){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.setAttribute("aria-pressed","false");
+    var c = document.createElement("span"); c.className="c"; c.textContent = st.code;
+    b.appendChild(c); b.appendChild(document.createTextNode(st.name));
+    b.addEventListener("click", function(){ selectStation(idx, true); });
+    chipsEl.appendChild(b); chipEls.push(b);
+  });
+
+  /* ===== 電車アイコン ===== */
+  function segAngle(a, b){ return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; }
+  var CENTER = {x:470, y:295};
+  function mapPos(s, dir){
+    var from = STATIONS[s.a], to = STATIONS[s.b];
+    var x = from.x + (to.x-from.x)*s.p, y = from.y + (to.y-from.y)*s.p;
+    var angle = s.stopped
+      ? (s.end ? segAngle(STATIONS[s.prev], from) : segAngle(from, STATIONS[s.next]))
+      : segAngle(from, to);
+    var dx = x - CENTER.x, dy = y - CENTER.y, len = Math.sqrt(dx*dx+dy*dy) || 1;
+    var off = dir === "inner" ? -10 : 10;
+    return { x: x + dx/len*off, y: y + dy/len*off, angle: angle };
+  }
+  function makeTrainEl(dir, layer){
+    var g = mk("g", {"class":"train "+dir});
+    mk("circle", {"class":"halo", r:24}, g);
+    mk("circle", {"class":"ring", r:20}, g);
+    var dirG = mk("g", {}, g);
+    mk("path", {"class":"arrow", d:"M19,-4.5 L26.5,0 L19,4.5 Z"}, dirG);
+    var tram = mk("g", {"class":"tram-icon"}, g);
+    mk("use", {href:"#tramSym"}, tram);
+    layer.appendChild(g);
+    return { g:g, dirG:dirG };
+  }
+  var pools = { map:{}, line:{} };
+  var layers = { map: document.getElementById("trainsLayer"), line: lineTrainsG };
+
+  function renderTrains(now, isHoliday){
+    var d = deps(isHoliday);
+    var nowMin = now.getHours()*60 + now.getMinutes() + now.getSeconds()/60 + now.getMilliseconds()/60000;
+    var counts = {inner:0, outer:0}, seen = {};
+    var pool = pools[view], layer = layers[view];
+    DIRS.forEach(function(dir){
+      d[dir].forEach(function(dep, di){
+        var s = trainState(dir, dep, nowMin);
+        if (!s) return;
+        counts[dir]++;
+        var key = dir + ":" + di;
+        seen[key] = true;
+        var item = pool[key];
+        if (!item){ item = makeTrainEl(dir, layer); pool[key] = item; }
+        var cls = "train " + dir + (s.stopped ? " stopped" : "") + (highlight[key] ? " next" : "");
+        if (view === "map"){
+          var p = mapPos(s, dir);
+          item.g.setAttribute("transform", "translate(" + p.x.toFixed(1) + " " + p.y.toFixed(1) + ")");
+          item.dirG.setAttribute("transform", "rotate(" + p.angle.toFixed(1) + ")");
+        } else {
+          var q = linePos(s, dir);
+          item.g.setAttribute("transform", "translate(" + q.x + " " + q.y.toFixed(1) + ") scale(.72)");
+          item.dirG.setAttribute("transform", dir === "inner" ? "rotate(90)" : "rotate(-90)");
+        }
+        if (item.cls !== cls){ item.g.setAttribute("class", cls); item.cls = cls; }
+      });
+    });
+    for (var k in pool){ if (!seen[k]){ layer.removeChild(pool[k].g); delete pool[k]; } }
+    return counts;
+  }
+
+  /* ===== 時間（ライブ／シミュレーション） ===== */
+  var sim = { mode:"live", speed:1, playing:true, simMs: Date.now(), lastTs:null };
+  function displayDate(){ return new Date(sim.simMs); }
+  function advanceSim(ts){
+    if (sim.lastTs === null) sim.lastTs = ts;
+    var dt = ts - sim.lastTs;
+    sim.lastTs = ts;
+    if (dt < 0) dt = 0;
+    if (dt > 250) dt = 250;
+    if (sim.mode === "live") sim.simMs = Date.now();
+    else if (sim.playing) sim.simMs += dt * sim.speed;
+  }
+
+  var panelDirty = true, lastCounts = { inner:0, outer:0 }, lastSec = -1;
+  var pb = {
+    play: document.getElementById("btnPlay"),
+    now: document.getElementById("btnNow"),
+    nowTop: document.getElementById("btnNowTop"),
+    jump: document.getElementById("btnJump"),
+    jumpTime: document.getElementById("jumpTime"),
+    speeds: document.querySelectorAll("[data-speed]")
+  };
+  function syncSpeedUI(){
+    for (var i=0;i<pb.speeds.length;i++){
+      var s = parseInt(pb.speeds[i].getAttribute("data-speed"), 10);
+      pb.speeds[i].setAttribute("aria-pressed", s === sim.speed ? "true" : "false");
+    }
+  }
+  function toSim(){ if (sim.mode === "live"){ sim.simMs = Date.now(); sim.mode = "sim"; } }
+  function goLive(){ sim.mode = "live"; sim.speed = 1; sim.playing = true; syncSpeedUI(); panelDirty = true; }
+  function jumpTo(hh, mm){
+    var d = displayDate(); d.setHours(hh, mm, 0, 0);
+    sim.simMs = d.getTime(); sim.mode = "sim"; sim.playing = true;
+    if (sim.speed === 1){ sim.speed = 60; syncSpeedUI(); }
+    panelDirty = true;
+  }
+  function inServiceAt(nm){ return nm >= 5*60+50 && nm <= 23*60+55; }
+
+  pb.play.addEventListener("click", function(){
+    if (sim.playing){ toSim(); sim.playing = false; }
+    else {
+      var d = displayDate(), nm = d.getHours()*60 + d.getMinutes();
+      if (!inServiceAt(nm) && lastCounts.inner + lastCounts.outer === 0){ jumpTo(7, 0); return; }
+      sim.playing = true;
+    }
+    panelDirty = true;
+  });
+  for (var si=0; si<pb.speeds.length; si++){
+    pb.speeds[si].addEventListener("click", function(){
+      var s = parseInt(this.getAttribute("data-speed"), 10);
+      if (s !== 1) toSim();
+      sim.speed = s; sim.playing = true;
+      syncSpeedUI(); panelDirty = true;
+    });
+  }
+  pb.now.addEventListener("click", goLive);
+  pb.nowTop.addEventListener("click", goLive);
+  pb.jump.addEventListener("click", function(){
+    var v = (pb.jumpTime.value || "08:00").split(":");
+    jumpTo(parseInt(v[0],10)||0, parseInt(v[1],10)||0);
+  });
+
+  /* ===== 表示切り替え（地図／縦の路線図） ===== */
+  var vBtn = { map: document.getElementById("vMap"), line: document.getElementById("vLine") };
+  function setView(v){
+    if (v !== "map" && v !== "line") v = "map";
+    // 切替前のアイコンを片付ける
+    var old = pools[view], ol = layers[view];
+    for (var k in old){ ol.removeChild(old[k].g); delete old[k]; }
+    view = v;
+    save("tram.view", v);
+    vBtn.map.setAttribute("aria-pressed", v === "map" ? "true" : "false");
+    vBtn.line.setAttribute("aria-pressed", v === "line" ? "true" : "false");
+    document.getElementById("map").style.display = v === "map" ? "" : "none";
+    document.getElementById("lineWrap").hidden = v !== "line";
+    document.getElementById("lgInner").textContent = v === "map" ? "（地図上で反時計回り）" : "（下へ進む）";
+    document.getElementById("lgOuter").textContent = v === "map" ? "（地図上で時計回り）" : "（上へ進む）";
+  }
+  vBtn.map.addEventListener("click", function(){ setView("map"); });
+  vBtn.line.addEventListener("click", function(){ setView("line"); });
+
+  /* ===== 次の電車 ===== */
+  function fmtTime(minOfDay){
+    var m = ((Math.round(minOfDay) % 1440) + 1440) % 1440;
+    var hh = Math.floor(m/60), mm = m % 60;
+    return hh + ":" + (mm<10?"0":"")+mm;
+  }
+  function nextTrains(dir, stIdx, nowMin, isHoliday){
+    var d = deps(isHoliday)[dir];
+    var off = OFFSETS[dir][stIdx] / 60;
+    var dwell = stIdx === IDX_LIBRARY ? 0 : DWELL_SEC/60;
+    var res = [];
+    for (var i=0;i<d.length;i++){
+      var arr = d[i] + off;
+      if (arr + dwell < nowMin) continue;
+      res.push({ time: arr, dwelling: arr <= nowMin, di: i, dep: d[i] });
+      if (res.length >= 3) break;
+    }
+    return res;
+  }
+  function followingNames(dir, stIdx){
+    var names = [];
+    for (var k=1;k<=3;k++){
+      var idx = dir === "inner" ? (stIdx + k) % N : ((stIdx - k) % N + N) % N;
+      names.push(STATIONS[idx].name);
+    }
+    return names;
+  }
+  function minsLabel(item, nowMin){
+    var diff = item.time - nowMin;
+    if (item.dwelling) return { big:"停車中", soon:true };
+    if (diff <= 0.5) return { big:"まもなく", soon:true };
+    return { big:"あと" + Math.ceil(diff) + "<small>分</small>", soon: diff <= 2, plain:"あと" + Math.ceil(diff) + "分" };
+  }
+  function renderDir(dir, stIdx, nowMin, isHoliday){
+    var listEl = el[dir + "List"];
+    var nexts = followingNames(dir, stIdx);
+    el[dir + "To"].textContent = nexts[0] + " 方面";
+    el[dir + "Note"].textContent = "この先：" + nexts.join(" → ") + " …";
+    var list = nextTrains(dir, stIdx, nowMin, isHoliday);
+    listEl.innerHTML = "";
+    if (!list.length){
+      var p = document.createElement("p");
+      p.className = "none-msg";
+      p.textContent = "本日の運行は終了しました（推定）。始発は中央図書館前 " + fmtTime(FIRST[dir]) + " 発の便から順にやってきます。";
+      listEl.appendChild(p);
+      return null;
+    }
+    list.forEach(function(item){
+      var li = document.createElement("li");
+      var ml = minsLabel(item, nowMin);
+      if (ml.soon) li.className = "soon";
+      var s = trainState(dir, item.dep, nowMin);
+      var where = s ? "いま：" + stateText(s) : "中央図書館前を " + fmtTime(item.dep) + " に出発予定";
+      li.innerHTML = '<span class="mins">' + ml.big + '</span>' +
+        '<span class="info"><span class="time">' + fmtTime(item.time) + '<small>着（推定）</small></span><br>' +
+        '<span class="where"></span></span>';
+      li.querySelector(".where").textContent = where;
+      listEl.appendChild(li);
+    });
+    highlight[dir + ":" + list[0].di] = true;
+    return list[0];
+  }
+
+  var el = {
+    date: document.getElementById("dateLine"),
+    clock: document.getElementById("clock"),
+    dia: document.getElementById("diaBadge"),
+    applied: document.getElementById("appliedMode"),
+    count: document.getElementById("countLine"),
+    pCode: document.getElementById("pCode"),
+    pName: document.getElementById("pName"),
+    pTransfer: document.getElementById("pTransfer"),
+    innerList: document.getElementById("innerList"),
+    outerList: document.getElementById("outerList"),
+    innerNote: document.getElementById("innerNote"),
+    outerNote: document.getElementById("outerNote"),
+    innerTo: document.getElementById("innerTo"),
+    outerTo: document.getElementById("outerTo"),
+    simText: document.getElementById("simText"),
+    fav: document.getElementById("favBtn"),
+    qName: document.getElementById("qName"),
+    qIn: document.getElementById("qIn"),
+    qOut: document.getElementById("qOut"),
+    sr: document.getElementById("srLive")
+  };
+
+  /* ===== 停留場の選択 ===== */
+  function syncFav(){
+    el.fav.setAttribute("aria-pressed", favorite === selected ? "true" : "false");
+    el.fav.textContent = favorite === selected ? "★ いつもの停留場" : "☆ いつもの停留場に";
+    chipEls.forEach(function(b,i){ b.classList.toggle("isfav", i === favorite); });
+    for (var i=0;i<N;i++){
+      favMarks[i].textContent = i === favorite ? " ★" : "";
+      if (favMarks[N+i]) favMarks[N+i].textContent = i === favorite ? "★" : "";
+    }
+  }
+  function selectStation(idx, user){
+    selected = idx;
+    stationEls.forEach(function(g,i){ g.classList.toggle("sel", i===idx); });
+    lineEls.forEach(function(g,i){ g.classList.toggle("sel", i===idx); });
+    chipEls.forEach(function(b,i){ b.setAttribute("aria-pressed", i===idx ? "true":"false"); });
+    var st = STATIONS[idx];
+    el.pCode.textContent = st.code;
+    el.pName.textContent = st.name;
+    el.pTransfer.textContent = st.transfer ? "🚏 " + st.transfer : "";
+    syncFav();
+    panelDirty = true;
+    try { history.replaceState(null, "", "#" + st.code); } catch(e){}
+    if (user){
+      el.sr.textContent = st.name + " を選びました";
+      if (window.innerWidth <= 920 && view === "map"){
+        document.getElementById("panel").scrollIntoView({behavior:"smooth", block:"start"});
+      }
+    }
+  }
+  el.fav.addEventListener("click", function(){
+    favorite = favorite === selected ? null : selected;
+    save("tram.fav", favorite === null ? null : String(favorite));
+    syncFav();
+  });
+  document.getElementById("quickbar").addEventListener("click", function(){
+    document.getElementById("panel").scrollIntoView({behavior:"smooth", block:"start"});
+  });
+
+  /* ===== ダイヤ切替 ===== */
+  var btns = { auto:document.getElementById("btnAuto"), wd:document.getElementById("btnWeekday"), hd:document.getElementById("btnHoliday") };
+  function setMode(v){
+    modeOverride = v;
+    btns.auto.setAttribute("aria-pressed", v===null ? "true":"false");
+    btns.wd.setAttribute("aria-pressed", v===false ? "true":"false");
+    btns.hd.setAttribute("aria-pressed", v===true ? "true":"false");
+    panelDirty = true;
+  }
+  btns.auto.addEventListener("click", function(){ setMode(null); });
+  btns.wd.addEventListener("click", function(){ setMode(false); });
+  btns.hd.addEventListener("click", function(){ setMode(true); });
+
+  /* ===== 1秒ごとの表示更新 ===== */
+  var WEEK = ["日","月","火","水","木","金","土"];
+  function loopLabel(){
+    var secLoop = Math.round(3420 / sim.speed);
+    return secLoop >= 120 ? "約" + Math.round(secLoop/60) + "分" : "約" + secLoop + "秒";
+  }
+  function updatePanel(){
+    var now = displayDate();
+    var isHoliday = isHolidayNow(now);
+    var reason = holidayReason(now);
+    el.date.textContent = (now.getMonth()+1) + "/" + now.getDate() + "（" + WEEK[now.getDay()] + (reason === "祝日" ? "・祝" : "") + "）";
+    var hh=now.getHours(), mm=now.getMinutes(), ss=now.getSeconds();
+    el.clock.textContent = (hh<10?"0":"")+hh+":"+(mm<10?"0":"")+mm+":"+(ss<10?"0":"")+ss;
+    el.dia.textContent = isHoliday ? "土日祝ダイヤ" : "平日ダイヤ";
+    el.applied.textContent = "適用中：" + (isHoliday ? "土日祝ダイヤ" : "平日ダイヤ") +
+      (modeOverride === null ? "（自動判定" + (reason ? "：" + reason : "：平日") + "）" : "（手動で切替中）");
+
+    document.body.classList.toggle("is-sim", sim.mode !== "live");
+    el.simText.textContent = sim.playing
+      ? "シミュレーション中 ×" + sim.speed + "（1周が" + loopLabel() + "）"
+      : "一時停止中（この時刻の推定位置）";
+
+    var counts = lastCounts;
+    var nowMin = hh*60 + mm + ss/60;
+    if (counts.inner + counts.outer === 0){
+      el.count.innerHTML = inServiceAt(nowMin)
+        ? "いま走っている電車はありません（推定）"
+        : "<strong>運行時間外です</strong>（おおむね 5:56〜23:49）";
+    } else {
+      el.count.innerHTML = "走行中 <strong class=\"in\">内回り " + counts.inner + "本</strong>・<strong class=\"out\">外回り " + counts.outer + "本</strong>";
+    }
+
+    pb.play.textContent = sim.playing ? "❚❚ 一時停止"
+      : (!inServiceAt(nowMin) && counts.inner + counts.outer === 0 ? "▶ 朝7時から再生" : "▶ 再生");
+    pb.now.disabled = sim.mode === "live";
+
+    highlight = {};
+    var nIn = renderDir("inner", selected, nowMin, isHoliday);
+    var nOut = renderDir("outer", selected, nowMin, isHoliday);
+
+    el.qName.innerHTML = "";
+    el.qName.appendChild(document.createTextNode(STATIONS[selected].name));
+    var sm = document.createElement("small"); sm.textContent = "次の電車（推定）・タップで詳細"; el.qName.appendChild(sm);
+    el.qIn.textContent = nIn ? (minsLabel(nIn, nowMin).plain || minsLabel(nIn, nowMin).big) : "終了";
+    el.qOut.textContent = nOut ? (minsLabel(nOut, nowMin).plain || minsLabel(nOut, nowMin).big) : "終了";
+  }
+
+  /* ===== フレームループ ===== */
+  function animate(ts){
+    advanceSim(ts);
+    var nowD = displayDate();
+    var sec = Math.floor(sim.simMs / 1000);
+    if (panelDirty || sec !== lastSec){
+      lastSec = sec; panelDirty = false;
+      updatePanel();
+    }
+    lastCounts = renderTrains(nowD, isHolidayNow(nowD));
+    requestAnimationFrame(animate);
+  }
+
+  /* ===== 起動 ===== */
+  var initial = selected;
+  var hash = (location.hash || "").replace("#","").toUpperCase();
+  var hi = STATIONS.findIndex ? STATIONS.findIndex(function(s){ return s.code === hash; }) : -1;
+  if (hi >= 0) initial = hi; else if (favorite !== null) initial = favorite;
+  setView(view);
+  selectStation(initial, false);
+  syncSpeedUI();
+  lastCounts = renderTrains(displayDate(), isHolidayNow(displayDate()));
+  requestAnimationFrame(animate);
+
+  // テスト用に一部を公開
+  window.__tram = { holidaysOf: holidaysOf, OFFSETS: OFFSETS, trainState: trainState, nextTrains: nextTrains };
+})();
+</script>
+</body>
+</html>
